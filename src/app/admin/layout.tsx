@@ -8,29 +8,40 @@ import { Loader2 } from 'lucide-react';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [checking, setChecking] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const isPublicRoute = pathname === '/admin/login' || pathname === '/admin/register';
     const activeStore = getCurrentActiveStore();
 
-    if (!isPublicRoute && !activeStore) {
-      // Redirecionamento forçado para a tela de login
-      window.location.href = '/admin/login';
+    if (isPublicRoute) {
+      setIsAllowed(true);
+    } else if (activeStore) {
+      setIsAllowed(true);
     } else {
-      setChecking(false);
+      setIsAllowed(false);
+      router.push('/admin/login');
     }
-  }, [pathname]);
+  }, [pathname, router]);
 
-  const isPublicRoute = pathname === '/admin/login' || pathname === '/admin/register';
-
-  // Tela de carregamento enquanto valida a sessão (evita tela branca)
-  if (checking && !isPublicRoute) {
+  if (!mounted) {
     return (
       <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
         <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
-        <p className="text-sm font-bold text-neutral-800">Verificando autorização do estabelecimento...</p>
-        <p className="text-xs text-neutral-500 mt-1">Redirecionando para o login...</p>
+        <p className="text-sm font-bold text-neutral-800">Carregando sistema...</p>
+      </div>
+    );
+  }
+
+  const isPublicRoute = pathname === '/admin/login' || pathname === '/admin/register';
+
+  if (!isAllowed && !isPublicRoute) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
+        <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
+        <p className="text-sm font-bold text-neutral-800">Redirecionando para a tela de login...</p>
       </div>
     );
   }

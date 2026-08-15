@@ -22,22 +22,22 @@ import { getCurrentActiveStore, logoutStoreAccount, StoreAccount } from '@/lib/a
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const store = getCurrentActiveStore();
-    if (!store) {
-      window.location.href = '/admin/login';
-    } else {
+    if (store) {
       setActiveStore(store);
     }
   }, []);
 
   const handleLogout = () => {
     logoutStoreAccount();
-    window.location.href = '/admin/login';
+    router.push('/admin/login');
   };
 
-  if (!activeStore) {
+  if (!mounted || !activeStore) {
     return (
       <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
         <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
