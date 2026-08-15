@@ -1,20 +1,53 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Motorbike, CheckCircle, Clock, Truck } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  ArrowLeft,
+  CheckCircle,
+  Clock,
+  Truck,
+  Printer,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import Link from 'next/link';
 import { getCurrentCashSession, ShiftOrder } from '@/lib/cash-register';
+import { syncIFoodOrders } from '@/lib/ifood';
 
 interface OrderWithDetails extends ShiftOrder {
   status: 'preparo' | 'pronto' | 'saiu' | 'entregue';
   motoboy?: string;
+  itemsSummary?: string;
+  addressSummary?: string;
 }
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<OrderWithDetails[]>([]);
   const [motoboyInputs, setMotoboyInputs] = useState<Record<string, string>>({});
+  const [autoPrint, setAutoPrint] = useState(false);
+  const [selectedOrderToPrint, setSelectedOrderToPrint] = useState<OrderWithDetails | null>(null);
 
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+
+  // Carrega configurações de Auto-Impressão e Pedidos
   useEffect(() => {
+    const savedAutoPrint = localStorage.getItem('garagem_auto_print');
+    if (savedAutoPrint !== null) {
+      setAutoPrint(JSON.parse(savedAutoPrint));
+    }
+
+    loadOrders();
+
+    // Sincroniza com iFood e atualiza lista a cada 15 segundos
+    const interval = setInterval(async () => {
+      await syncIFoodOrders();
+      loadOrders();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadOrders = () => {
     const session = getCurrentCashSession();
     const savedDetails = localStorage.getItem('garagem_orders_details');
     let detailsMap: Record<string, { status: any; motoboy?: string }> = {};
@@ -33,8 +66,28 @@ export default function AdminOrdersPage() {
       motoboy: detailsMap[o.id]?.motoboy || '',
     }));
 
+    // Verifica se chegaram novos pedidos
+    const newOrders = merged.filter((o) => !knownOrderIdsRef.current.has(o.id));
+
+    if (newOrders.length > 0 && knownOrderIdsRef.current.size > 0) {
+      const latestOrder = newOrders[0];
+      // Se a impressão automática estiver ativa, dispara a impressão do novo pedido
+      const isAuto = localStorage.getItem('garagem_auto_print');
+      if (isAuto && JSON.parse(isAuto)) {
+        triggerPrint(latestOrder);
+      }
+    }
+
+    // Atualiza lista de IDs conhecidos
+    merged.forEach((o) => knownOrderIdsRef.current.add(o.id));
     setOrders(merged);
-  }, []);
+  };
+
+  const toggleAutoPrint = () => {
+    const newValue = !autoPrint;
+    setAutoPrint(newValue);
+    localStorage.setItem('garagem_auto_print', JSON.stringify(newValue));
+  };
 
   const saveOrderDetails = (updated: OrderWithDetails[]) => {
     const detailsMap: Record<string, { status: string; motoboy?: string }> = {};
@@ -61,20 +114,64 @@ export default function AdminOrdersPage() {
     saveOrderDetails(updated);
   };
 
+  const triggerPrint = (order: OrderWithDetails) => {
+    setSelectedOrderToPrint(order);
+    setTimeout(() => {
+      window.print();
+    }, 200);
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
-      <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      {/* Estilo Especial para Impressoras Térmicas (Apenas o Comprovante é impresso) */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #thermal-receipt,
+          #thermal-receipt * {
+            visibility: visible;
+          }
+          #thermal-receipt {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm;
+            padding: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #000;
+          }
+        }
+      `}</style>
+
+      {/* Header Principal */}
+      <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 print:hidden">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <Link href="/admin" className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-600">
               <ArrowLeft size={20} />
             </Link>
             <h1 className="text-xl font-bold text-neutral-900">Gestão de Pedidos & Motoboys</h1>
           </div>
+
+          {/* Botão para Ativar/Desativar Impressão Automática */}
+          <button
+            onClick={toggleAutoPrint}
+            className={`px-4 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border transition-colors ${
+              autoPrint
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                : 'bg-neutral-100 text-neutral-600 border-neutral-300'
+            }`}
+          >
+            {autoPrint ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <span>Impressão Automática: {autoPrint ? 'ATIVADA' : 'DESATIVADA'}</span>
+          </button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 mt-6 space-y-4">
+      <div className="max-w-5xl mx-auto px-4 mt-6 space-y-4 print:hidden">
         {orders.length === 0 ? (
           <div className="bg-white p-8 rounded-xl text-center text-neutral-500 border border-neutral-200">
             Nenhum pedido registrado no caixa aberto no momento.
@@ -92,9 +189,21 @@ export default function AdminOrdersPage() {
                     <p className="text-xs text-neutral-500">{ord.createdAt} • Tel: {ord.phone}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-bold text-emerald-600 text-lg">R$ {ord.total.toFixed(2)}</span>
-                  <span className="text-xs text-neutral-400 block uppercase font-medium">{ord.paymentMethod}</span>
+
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <span className="font-bold text-emerald-600 text-lg">R$ {ord.total.toFixed(2)}</span>
+                    <span className="text-xs text-neutral-400 block uppercase font-medium">{ord.paymentMethod}</span>
+                  </div>
+
+                  {/* Botão Imprimir Manual */}
+                  <button
+                    onClick={() => triggerPrint(ord)}
+                    className="p-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg flex items-center gap-1.5 text-xs font-bold border border-neutral-300"
+                    title="Imprimir Cupom do Pedido"
+                  >
+                    <Printer size={16} /> Imprimir
+                  </button>
                 </div>
               </div>
 
@@ -171,6 +280,40 @@ export default function AdminOrdersPage() {
           ))
         )}
       </div>
+
+      {/* MODELO DO CUPOM TÉRMICO (Formatado para Impressoras Térmicas) */}
+      {selectedOrderToPrint && (
+        <div id="thermal-receipt" className="hidden print:block">
+          <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>GARAGEM.COM</h2>
+            <p style={{ margin: 0, fontSize: '11px' }}>Pizzaria & Delivery</p>
+            <p style={{ margin: '5px 0', borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '3px 0' }}>
+              <strong>PEDIDO #{selectedOrderToPrint.orderNumber}</strong>
+            </p>
+          </div>
+
+          <p style={{ margin: '3px 0' }}>Data/Hora: {selectedOrderToPrint.createdAt}</p>
+          <p style={{ margin: '3px 0' }}>Cliente: <strong>{selectedOrderToPrint.customerName}</strong></p>
+          <p style={{ margin: '3px 0' }}>Telefone: {selectedOrderToPrint.phone}</p>
+          {selectedOrderToPrint.motoboy && <p style={{ margin: '3px 0' }}>Motoboy: {selectedOrderToPrint.motoboy}</p>}
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          <p style={{ margin: '3px 0', fontWeight: 'bold' }}>FORMA DE PAGAMENTO:</p>
+          <p style={{ margin: '3px 0', textTransform: 'uppercase' }}>{selectedOrderToPrint.paymentMethod}</p>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          <div style={{ textAlign: 'right', fontSize: '14px', fontWeight: 'bold', marginTop: '5px' }}>
+            TOTAL: R$ {selectedOrderToPrint.total.toFixed(2)}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '10px' }}>
+            <p style={{ margin: 0 }}>Obrigado pela preferência!</p>
+            <p style={{ margin: 0 }}>www.garagem-com-oficial.vercel.app</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
