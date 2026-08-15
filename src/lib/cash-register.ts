@@ -1,157 +1,187 @@
+import { getStoreSettings, CardRates } from './settings';
+
 export interface ShiftOrder {
   id: string;
   orderNumber: number;
   customerName: string;
   phone: string;
   total: number;
-  paymentMethod: string;
+  paymentMethod:
+    | 'dinheiro'
+    | 'pix'
+    | 'credito_online'
+    | 'debito_online'
+    | 'credito_presencial'
+    | 'debito_presencial';
   createdAt: string;
+}
+
+export interface PaymentBreakdown {
+  method: string;
+  label: string;
+  grossAmount: number; // Valor Bruto
+  feeRate: number;      // Porcentagem de Taxa
+  feeAmount: number;    // Valor da Taxa Descontada
+  netAmount: number;    // Valor Líquido
+  orderCount: number;
+}
+
+export interface ClosureReport {
+  sessionId: string;
+  openedAt: string;
+  closedAt: string;
+  initialCash: number;
+  grossTotal: number;
+  totalFees: number;
+  netTotal: number;
+  totalCashInHand: number; // Troco Inicial + Dinheiro das vendas
+  breakdown: PaymentBreakdown[];
 }
 
 export interface CashSession {
   id: string;
   isOpen: boolean;
   openedAt: string;
-  closedAt: string | null;
-  initialBalance: number; // Fundo de caixa inicial
-  currentOrderCount: number; // Contador de pedidos do caixa atual (#1, #2...)
+  closedAt?: string;
+  initialCash: number;
   orders: ShiftOrder[];
+  closureReport?: ClosureReport;
 }
 
-export interface CashHistorySession extends CashSession {
-  totalSales: number;
-  salesByPayment: {
-    pix: number;
-    card: number;
-    cash: number;
-  };
-}
+const STORAGE_KEY = 'garagem_cash_session';
 
-const STORAGE_KEY_CURRENT = 'garagem_current_cash_session';
-const STORAGE_KEY_HISTORY = 'garagem_cash_sessions_history';
-
-const DEFAULT_SESSION: CashSession = {
-  id: '',
-  isOpen: false,
-  openedAt: '',
-  closedAt: null,
-  initialBalance: 0,
-  currentOrderCount: 0,
-  orders: [],
-};
-
-// 1. Obter status do caixa atual
 export function getCurrentCashSession(): CashSession {
-  if (typeof window === 'undefined') return DEFAULT_SESSION;
-  const saved = localStorage.getItem(STORAGE_KEY_CURRENT);
-  if (!saved) return DEFAULT_SESSION;
+  if (typeof window === 'undefined') {
+    return { id: '1', isOpen: false, openedAt: '', initialCash: 0, orders: [] };
+  }
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) {
+    return { id: Date.now().toString(), isOpen: false, openedAt: '', initialCash: 0, orders: [] };
+  }
+
   try {
     return JSON.parse(saved);
   } catch {
-    return DEFAULT_SESSION;
+    return { id: Date.now().toString(), isOpen: false, openedAt: '', initialCash: 0, orders: [] };
   }
 }
 
-// 2. Abrir o Caixa (Zera o contador de pedidos para #1)
-export function openCashRegister(initialBalance: number): CashSession {
+export function openCashRegister(initialCash: number): CashSession {
   const newSession: CashSession = {
     id: Date.now().toString(),
     isOpen: true,
     openedAt: new Date().toLocaleString('pt-BR'),
-    closedAt: null,
-    initialBalance,
-    currentOrderCount: 0, // Reinicia os pedidos em #0 (o 1º pedido gerará #1)
+    initialCash,
     orders: [],
   };
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(newSession));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
   }
+
   return newSession;
 }
 
-// 3. Registrar novo pedido no caixa atual e retornar o número do pedido (#1, #2...)
-export function registerOrderInCash(orderData: {
-  customerName: string;
-  phone: string;
-  total: number;
-  paymentMethod: string;
-}): { orderNumber: number; sessionIsOpen: boolean } {
-  const current = getCurrentCashSession();
-
-  if (!current.isOpen) {
-    return { orderNumber: 0, sessionIsOpen: false };
+export function registerOrderInCash(orderData: Omit<ShiftOrder, 'id' | 'orderNumber' | 'createdAt'>): CashSession {
+  const session = getCurrentCashSession();
+  if (!session.isOpen) {
+    // Se o caixa não estava aberto, abre automaticamente
+    openCashRegister(100);
+    return registerOrderInCash(orderData);
   }
 
-  const nextNumber = current.currentOrderCount + 1;
   const newOrder: ShiftOrder = {
+    ...orderData,
     id: Date.now().toString(),
-    orderNumber: nextNumber,
-    customerName: orderData.customerName || 'Cliente',
-    phone: orderData.phone || '',
-    total: orderData.total,
-    paymentMethod: orderData.paymentMethod,
+    orderNumber: session.orders.length + 1,
     createdAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
   };
 
   const updatedSession: CashSession = {
-    ...current,
-    currentOrderCount: nextNumber,
-    orders: [newOrder, ...current.orders],
+    ...session,
+    orders: [newOrder, ...session.orders],
   };
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(updatedSession));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSession));
   }
 
-  return { orderNumber: nextNumber, sessionIsOpen: true };
+  return updatedSession;
 }
 
-// 4. Fechar o Caixa e salvar no Histórico
-export function closeCashRegister(): CashHistorySession | null {
-  const current = getCurrentCashSession();
-  if (!current.isOpen) return null;
+// Lógica de Operação Completa de Fechamento de Caixa
+export function closeCashRegisterWithOperation(): { session: CashSession; report: ClosureReport } {
+  const session = getCurrentCashSession();
+  const settings = getStoreSettings();
+  const rates: CardRates = settings.cardRates;
 
-  const totalSales = current.orders.reduce((acc, o) => acc + o.total, 0);
+  const paymentTypes = [
+    { key: 'dinheiro', label: 'Dinheiro (Em Espécie)', fee: 0 },
+    { key: 'pix', label: 'PIX', fee: rates.pixFee || 0 },
+    { key: 'credito_online', label: 'Crédito Online (App/Site)', fee: rates.creditOnlineFee || 0 },
+    { key: 'debito_online', label: 'Débito Online (App/Site)', fee: rates.debitOnlineFee || 0 },
+    { key: 'credito_presencial', label: 'Crédito Presencial (Maquininha)', fee: rates.creditInPersonFee || 0 },
+    { key: 'debito_presencial', label: 'Débito Presencial (Maquininha)', fee: rates.debitInPersonFee || 0 },
+  ];
 
-  const salesByPayment = current.orders.reduce(
-    (acc, o) => {
-      if (o.paymentMethod === 'pix') acc.pix += o.total;
-      else if (o.paymentMethod.includes('online') || o.paymentMethod.includes('card') || o.paymentMethod.includes('machine')) acc.card += o.total;
-      else acc.cash += o.total;
-      return acc;
-    },
-    { pix: 0, card: 0, cash: 0 }
-  );
+  let grossTotal = 0;
+  let totalFees = 0;
+  let netTotal = 0;
+  let cashSalesTotal = 0;
 
-  const closedHistorySession: CashHistorySession = {
-    ...current,
-    isOpen: false,
+  const breakdown: PaymentBreakdown[] = paymentTypes.map((pt) => {
+    const matchingOrders = session.orders.filter((o) => o.paymentMethod === pt.key);
+    const grossAmount = matchingOrders.reduce((sum, o) => sum + o.total, 0);
+    const feeAmount = (grossAmount * pt.fee) / 100;
+    const netAmount = grossAmount - feeAmount;
+
+    grossTotal += grossAmount;
+    totalFees += feeAmount;
+    netTotal += netAmount;
+
+    if (pt.key === 'dinheiro') {
+      cashSalesTotal += grossAmount;
+    }
+
+    return {
+      method: pt.key,
+      label: pt.label,
+      grossAmount,
+      feeRate: pt.fee,
+      feeAmount,
+      netAmount,
+      orderCount: matchingOrders.length,
+    };
+  });
+
+  const report: ClosureReport = {
+    sessionId: session.id,
+    openedAt: session.openedAt,
     closedAt: new Date().toLocaleString('pt-BR'),
-    totalSales,
-    salesByPayment,
+    initialCash: session.initialCash,
+    grossTotal,
+    totalFees,
+    netTotal,
+    totalCashInHand: session.initialCash + cashSalesTotal,
+    breakdown,
+  };
+
+  const closedSession: CashSession = {
+    ...session,
+    isOpen: false,
+    closedAt: report.closedAt,
+    closureReport: report,
   };
 
   if (typeof window !== 'undefined') {
-    // Salva no histórico de caixas anteriores
-    const history = getCashHistory();
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify([closedHistorySession, ...history]));
-
-    // Reseta o caixa atual para fechado
-    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(DEFAULT_SESSION));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(closedSession));
+    // Salva o histórico de caixas fechados
+    const historySaved = localStorage.getItem('garagem_cash_history');
+    const history = historySaved ? JSON.parse(historySaved) : [];
+    history.unshift(report);
+    localStorage.setItem('garagem_cash_history', JSON.stringify(history));
   }
 
-  return closedHistorySession;
-}
-
-// 5. Obter histórico de caixas anteriores
-export function getCashHistory(): CashHistorySession[] {
-  if (typeof window === 'undefined') return [];
-  const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
-  if (!saved) return [];
-  try {
-    return JSON.parse(saved);
-  } catch {
-    return [];
-  }
+  return { session: closedSession, report };
 }

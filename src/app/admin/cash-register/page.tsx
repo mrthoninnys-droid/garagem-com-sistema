@@ -3,269 +3,162 @@
 import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
+  DollarSign,
   Lock,
   Unlock,
-  DollarSign,
-  TrendingUp,
-  Receipt,
-  AlertCircle,
-  Calendar,
-  CreditCard,
-  QrCode,
-  Banknote,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
   CashSession,
-  CashHistorySession,
+  ClosureReport,
   getCurrentCashSession,
   openCashRegister,
-  closeCashRegister,
-  getCashHistory,
+  closeCashRegisterWithOperation,
 } from '@/lib/cash-register';
 
 export default function AdminCashRegisterPage() {
-  const [session, setSession] = useState<CashSession | null>(null);
-  const [history, setHistory] = useState<CashHistorySession[]>([]);
-  const [initialBalanceInput, setInitialBalanceInput] = useState('50.00');
-  const [lastClosedSummary, setLastClosedSummary] = useState<CashHistorySession | null>(null);
+  const [session, setSession] = useState<CashSession>(getCurrentCashSession());
+  const [initialCashInput, setInitialCashInput] = useState('100.00');
+  const [activeReport, setActiveReport] = useState<ClosureReport | null>(null);
 
   useEffect(() => {
-    setSession(getCurrentCashSession());
-    setHistory(getCashHistory());
+    const current = getCurrentCashSession();
+    setSession(current);
+    if (current.closureReport) {
+      setActiveReport(current.closureReport);
+    }
   }, []);
 
-  const handleOpenRegister = (e: React.FormEvent) => {
+  const handleOpenCash = (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(initialBalanceInput) || 0;
-    const newSess = openCashRegister(amount);
-    setSession(newSess);
-    setLastClosedSummary(null);
+    const val = parseFloat(initialCashInput) || 0;
+    const opened = openCashRegister(val);
+    setSession(opened);
+    setActiveReport(null);
   };
 
-  const handleCloseRegister = () => {
-    if (confirm('Tem certeza que deseja fechar o caixa do turno atual?')) {
-      const summary = closeCashRegister();
-      setLastClosedSummary(summary);
-      setSession(getCurrentCashSession());
-      setHistory(getCashHistory());
+  const handleCloseCashOperation = () => {
+    if (confirm('Confirma o fechamento do caixa com o cálculo das taxas de cartão descontadas?')) {
+      const { session: closed, report } = closeCashRegisterWithOperation();
+      setSession(closed);
+      setActiveReport(report);
     }
   };
 
-  if (!session) return null;
-
-  // Cálculos do Caixa Aberto
-  const totalSales = session.orders.reduce((acc, o) => acc + o.total, 0);
-  const totalCashSales = session.orders
-    .filter((o) => o.paymentMethod === 'cash')
-    .reduce((acc, o) => acc + o.total, 0);
-  const totalPixSales = session.orders
-    .filter((o) => o.paymentMethod === 'pix')
-    .reduce((acc, o) => acc + o.total, 0);
-  const totalCardSales = session.orders
-    .filter((o) => o.paymentMethod !== 'cash' && o.paymentMethod !== 'pix')
-    .reduce((acc, o) => acc + o.total, 0);
-
-  const expectedCashInDrawer = session.initialBalance + totalCashSales;
-
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
-      {/* Header */}
-      <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #closure-receipt,
+          #closure-receipt * {
+            visibility: visible;
+          }
+          #closure-receipt {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm;
+            padding: 5px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #000;
+          }
+        }
+      `}</style>
+
+      <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 print:hidden">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/admin" className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-600">
               <ArrowLeft size={20} />
             </Link>
             <h1 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
-              <DollarSign className="text-emerald-600" size={24} /> Gestão de Caixa Diário
+              <DollarSign size={22} className="text-emerald-600" /> Controle de Caixa Diário
             </h1>
           </div>
-          <div>
-            {session.isOpen ? (
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full text-xs flex items-center gap-1">
-                <Unlock size={14} /> CAIXA ABERTO
-              </span>
-            ) : (
-              <span className="px-3 py-1 bg-red-100 text-red-800 font-bold rounded-full text-xs flex items-center gap-1">
-                <Lock size={14} /> CAIXA FECHADO
-              </span>
-            )}
-          </div>
+
+          {session.isOpen && (
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full text-xs flex items-center gap-1.5">
+              <Unlock size={14} /> CAIXA ABERTO
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 mt-6 space-y-6">
-        {/* CAIXA FECHADO - Formulário de Abertura */}
-        {!session.isOpen && (
-          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-4">
-            <div className="border-b border-neutral-100 pb-3">
-              <h2 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
-                <Lock className="text-red-500" size={20} /> Abrir Caixa para Novo Turno
-              </h2>
-              <p className="text-xs text-neutral-500 mt-1">
-                Ao abrir o caixa, o contador de pedidos reinicia automaticamente no **Pedido #1**.
-              </p>
+      <div className="max-w-4xl mx-auto px-4 mt-6 space-y-6 print:hidden">
+        {/* Se o caixa estiver FECHADO */}
+        {!session.isOpen ? (
+          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-neutral-900 text-white rounded-xl flex items-center justify-center mx-auto">
+                <Lock size={24} />
+              </div>
+              <h2 className="text-lg font-bold text-neutral-900">O Caixa Está Fechado</h2>
+              <p className="text-xs text-neutral-500">Informe o fundo de troco para abrir a operação do dia</p>
             </div>
 
-            <form onSubmit={handleOpenRegister} className="space-y-4 max-w-md">
+            <form onSubmit={handleOpenCash} className="max-w-xs mx-auto space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Fundo de Caixa Inicial (Troco R$)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-sm font-bold text-neutral-500">R$</span>
-                  <input
-                    type="number"
-                    step="0.50"
-                    required
-                    value={initialBalanceInput}
-                    onChange={(e) => setInitialBalanceInput(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 border border-neutral-300 rounded-lg font-bold text-neutral-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">Fundo de Troco Inicial (R$)</label>
+                <input
+                  type="number"
+                  step="5.00"
+                  required
+                  value={initialCashInput}
+                  onChange={(e) => setInitialCashInput(e.target.value)}
+                  className="w-full p-2.5 border border-neutral-300 rounded-lg text-base font-bold text-center"
+                />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-md flex items-center justify-center gap-2"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-sm transition-colors shadow-sm"
               >
-                <Unlock size={18} /> Abrir Caixa Agora
+                Abrir Caixa Agora
               </button>
             </form>
           </div>
-        )}
-
-        {/* RESUMO DO FECHAMENTO MAIS RECENTE */}
-        {lastClosedSummary && (
-          <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl space-y-3">
-            <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
-              <Receipt size={20} /> Resumo do Caixa Fechado
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-emerald-900">
+        ) : (
+          /* Se o caixa estiver ABERTO */
+          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-100 pb-4 gap-3">
               <div>
-                <span className="text-xs text-emerald-700 block">Abertura / Fechamento</span>
-                <span className="font-semibold">{lastClosedSummary.closedAt}</span>
-              </div>
-              <div>
-                <span className="text-xs text-emerald-700 block">Total de Pedidos</span>
-                <span className="font-semibold">{lastClosedSummary.orders.length} pedidos</span>
-              </div>
-              <div>
-                <span className="text-xs text-emerald-700 block">Vendas Totais</span>
-                <span className="font-bold text-base">R$ {lastClosedSummary.totalSales.toFixed(2)}</span>
-              </div>
-              <div>
-                <span className="text-xs text-emerald-700 block">Dinheiro em Caixa</span>
-                <span className="font-bold text-base">
-                  R$ {(lastClosedSummary.initialBalance + lastClosedSummary.salesByPayment.cash).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CAIXA ABERTO - Dashboard do Turno */}
-        {session.isOpen && (
-          <div className="space-y-6">
-            {/* Cards de Métricas do Caixa */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm">
-                <span className="text-xs text-neutral-500 block mb-1">Abertura do Caixa</span>
-                <span className="font-bold text-neutral-900 text-sm">{session.openedAt}</span>
-                <span className="text-[11px] text-neutral-500 block mt-1">Fundo: R$ {session.initialBalance.toFixed(2)}</span>
+                <span className="text-xs text-neutral-500">Caixa Aberto em: {session.openedAt}</span>
+                <h2 className="text-lg font-bold text-neutral-900 mt-0.5">
+                  Fundo de Troco Inicial: R$ {session.initialCash.toFixed(2)}
+                </h2>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm">
-                <span className="text-xs text-neutral-500 block mb-1">Total Pedidos Hoje</span>
-                <span className="font-bold text-2xl text-neutral-900">#{session.currentOrderCount}</span>
-                <span className="text-[11px] text-emerald-600 font-semibold block mt-1">
-                  {session.orders.length} vendas realizadas
-                </span>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm">
-                <span className="text-xs text-neutral-500 block mb-1">Faturamento do Turno</span>
-                <span className="font-bold text-2xl text-emerald-600">R$ {totalSales.toFixed(2)}</span>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm">
-                <span className="text-xs text-neutral-500 block mb-1">Dinheiro em Gaveta</span>
-                <span className="font-bold text-2xl text-amber-600">R$ {expectedCashInDrawer.toFixed(2)}</span>
-                <span className="text-[11px] text-neutral-400 block mt-1">(Fundo + Vendas em Dinheiro)</span>
-              </div>
+              <button
+                onClick={handleCloseCashOperation}
+                className="px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+              >
+                <Lock size={16} /> Fechar Caixa & Descontar Taxas
+              </button>
             </div>
 
-            {/* Vendas por Meio de Pagamento */}
-            <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-4">
-              <h2 className="font-bold text-lg text-neutral-900 border-b border-neutral-100 pb-3">
-                Detalhamento por Pagamento
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-900">
-                    <QrCode size={20} />
-                    <span className="font-semibold text-sm">PIX</span>
-                  </div>
-                  <span className="font-bold text-emerald-800 text-base">R$ {totalPixSales.toFixed(2)}</span>
-                </div>
-
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-blue-900">
-                    <CreditCard size={20} />
-                    <span className="font-semibold text-sm">Cartão (Crédito/Débito)</span>
-                  </div>
-                  <span className="font-bold text-blue-800 text-base">R$ {totalCardSales.toFixed(2)}</span>
-                </div>
-
-                <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-amber-900">
-                    <Banknote size={20} />
-                    <span className="font-semibold text-sm">Dinheiro</span>
-                  </div>
-                  <span className="font-bold text-amber-800 text-base">R$ {totalCashSales.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-neutral-100 flex justify-end">
-                <button
-                  onClick={handleCloseRegister}
-                  className="px-6 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors shadow-md flex items-center gap-2"
-                >
-                  <Lock size={18} /> Fechar Caixa do Turno
-                </button>
-              </div>
-            </div>
-
-            {/* Pedidos do Turno */}
-            <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-4">
-              <h2 className="font-bold text-lg text-neutral-900 border-b border-neutral-100 pb-3 flex items-center justify-between">
-                <span>Pedidos Realizados neste Turno</span>
-                <span className="text-xs font-normal text-neutral-500">{session.orders.length} pedidos</span>
-              </h2>
+            <div className="space-y-3">
+              <h3 className="font-bold text-sm text-neutral-900">Vendas Registradas no Turno ({session.orders.length})</h3>
 
               {session.orders.length === 0 ? (
-                <p className="text-center text-neutral-500 py-6 text-sm">
-                  Nenhum pedido realizado após a abertura do caixa.
-                </p>
+                <p className="text-xs text-neutral-500 italic py-4 text-center">Nenhum pedido registrado ainda.</p>
               ) : (
                 <div className="space-y-2">
                   {session.orders.map((ord) => (
                     <div
                       key={ord.id}
-                      className="flex items-center justify-between p-3 border border-neutral-200 rounded-lg bg-neutral-50 text-sm"
+                      className="flex items-center justify-between p-3 border border-neutral-200 rounded-lg bg-neutral-50 text-xs"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="px-2.5 py-1 bg-neutral-900 text-white font-bold rounded text-xs">
-                          Pedido #{ord.orderNumber}
-                        </span>
-                        <div>
-                          <span className="font-bold text-neutral-900 block">{ord.customerName}</span>
-                          <span className="text-xs text-neutral-500">{ord.createdAt} • Pagamento: {ord.paymentMethod.toUpperCase()}</span>
-                        </div>
+                      <div>
+                        <span className="font-bold text-neutral-900">Pedido #{ord.orderNumber} - {ord.customerName}</span>
+                        <span className="text-neutral-500 block">{ord.createdAt} • Método: {ord.paymentMethod}</span>
                       </div>
-                      <span className="font-bold text-emerald-600">R$ {ord.total.toFixed(2)}</span>
+                      <span className="font-bold text-emerald-600 text-sm">R$ {ord.total.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -274,33 +167,109 @@ export default function AdminCashRegisterPage() {
           </div>
         )}
 
-        {/* HISTÓRICO DE CAIXAS FECHADOS */}
-        {history.length > 0 && (
-          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-4">
-            <h2 className="font-bold text-lg text-neutral-900 border-b border-neutral-100 pb-3 flex items-center gap-2">
-              <Calendar size={20} /> Histórico de Caixas Fechados Anteriormente
-            </h2>
+        {/* Exibição do Relatório do Fechamento */}
+        {activeReport && (
+          <div className="bg-white p-6 rounded-xl border border-neutral-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={24} className="text-emerald-600" />
+                <h2 className="text-lg font-bold text-neutral-900">Extrato Consolidado do Fechamento</h2>
+              </div>
 
-            <div className="space-y-3">
-              {history.map((h) => (
-                <div key={h.id} className="p-4 border border-neutral-200 rounded-lg bg-neutral-50 space-y-2 text-sm">
-                  <div className="flex justify-between items-center border-b border-neutral-200 pb-2">
-                    <span className="font-bold text-neutral-900">Fechado em: {h.closedAt}</span>
-                    <span className="font-bold text-emerald-600 text-base">
-                      Total Vendido: R$ {h.totalSales.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs text-neutral-600 pt-1">
-                    <span>Pedidos: <strong>{h.orders.length}</strong></span>
-                    <span>Troco Inicial: <strong>R$ {h.initialBalance.toFixed(2)}</strong></span>
-                    <span>Dinheiro em Caixa: <strong>R$ {(h.initialBalance + h.salesByPayment.cash).toFixed(2)}</strong></span>
-                  </div>
-                </div>
-              ))}
+              <button
+                onClick={() => window.print()}
+                className="px-3.5 py-2 bg-neutral-900 text-white font-bold rounded-lg text-xs flex items-center gap-1.5"
+              >
+                <Printer size={16} /> Imprimir Relatório
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+                <span className="text-xs text-neutral-500 font-semibold block">Faturamento Bruto Total</span>
+                <span className="text-lg font-bold text-neutral-900">R$ {activeReport.grossTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                <span className="text-xs text-red-600 font-semibold block">Total Taxas Descontadas</span>
+                <span className="text-lg font-bold text-red-700">- R$ {activeReport.totalFees.toFixed(2)}</span>
+              </div>
+
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span className="text-xs text-emerald-800 font-semibold block">Faturamento Líquido Real</span>
+                <span className="text-lg font-bold text-emerald-700">R$ {activeReport.netTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Tabela de Métodos de Pagamento */}
+            <div className="border border-neutral-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-neutral-100 font-bold text-neutral-700 uppercase border-b border-neutral-200">
+                  <tr>
+                    <th className="p-3">Forma de Pagamento</th>
+                    <th className="p-3">Qtd</th>
+                    <th className="p-3">Valor Bruto</th>
+                    <th className="p-3">Taxa (%)</th>
+                    <th className="p-3">Desconto (R$)</th>
+                    <th className="p-3">Valor Líquido</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {activeReport.breakdown.map((row) => (
+                    <tr key={row.method} className="hover:bg-neutral-50">
+                      <td className="p-3 font-bold text-neutral-900">{row.label}</td>
+                      <td className="p-3">{row.orderCount}</td>
+                      <td className="p-3 font-semibold">R$ {row.grossAmount.toFixed(2)}</td>
+                      <td className="p-3 text-neutral-500">{row.feeRate}%</td>
+                      <td className="p-3 text-red-600 font-semibold">- R$ {row.feeAmount.toFixed(2)}</td>
+                      <td className="p-3 font-bold text-emerald-600">R$ {row.netAmount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center text-sm">
+              <span className="font-bold text-amber-900">Dinheiro a Conferir na Gaveta (Troco Inicial + Espécie):</span>
+              <span className="text-lg font-bold text-amber-900">R$ {activeReport.totalCashInHand.toFixed(2)}</span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Relatório Térmico Impresso em 80mm */}
+      {activeReport && (
+        <div id="closure-receipt" className="hidden print:block">
+          <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: 0 }}>GARAGEM.COM</h2>
+            <p style={{ margin: 0, fontSize: '10px' }}>RELATÓRIO DE FECHAMENTO DE CAIXA</p>
+            <p style={{ margin: '5px 0', borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '3px 0' }}>
+              Abertura: {activeReport.openedAt}<br />
+              Fechamento: {activeReport.closedAt}
+            </p>
+          </div>
+
+          <p style={{ margin: '3px 0' }}>Troco Inicial: R$ {activeReport.initialCash.toFixed(2)}</p>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }}></div>
+
+          <p style={{ margin: '3px 0', fontWeight: 'bold' }}>DETALHAMENTO DAS TAXAS:</p>
+          {activeReport.breakdown.map((b) => (
+            <div key={b.method} style={{ marginBottom: '4px' }}>
+              <span>{b.label} ({b.orderCount}x):</span><br />
+              <span>Bruto: R$ {b.grossAmount.toFixed(2)} | Taxa ({b.feeRate}%): -R$ {b.feeAmount.toFixed(2)}</span><br />
+              <strong>Líquido: R$ {b.netAmount.toFixed(2)}</strong>
+            </div>
+          ))}
+
+          <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }}></div>
+
+          <p style={{ margin: '3px 0' }}>Faturamento Bruto: R$ {activeReport.grossTotal.toFixed(2)}</p>
+          <p style={{ margin: '3px 0', color: '#000' }}>Total Taxas: -R$ {activeReport.totalFees.toFixed(2)}</p>
+          <p style={{ margin: '3px 0', fontSize: '13px', fontWeight: 'bold' }}>LÍQUIDO REAL: R$ {activeReport.netTotal.toFixed(2)}</p>
+          <p style={{ margin: '3px 0', fontSize: '12px', fontWeight: 'bold' }}>GAVETA (DINHEIRO): R$ {activeReport.totalCashInHand.toFixed(2)}</p>
+        </div>
+      )}
     </div>
   );
 }
