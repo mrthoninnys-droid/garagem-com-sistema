@@ -1,15 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard, ShoppingBag, Award } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard, ShoppingBag, Award, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { calculateFeeForAddress } from '@/lib/delivery-rates';
-import {
-  getLoyaltySettings,
-  getCustomerLoyaltyByPhone,
-  addOrderPoints,
-  CustomerLoyalty,
-} from '@/lib/loyalty';
+import { getLoyaltySettings, getCustomerLoyaltyByPhone, addOrderPoints, CustomerLoyalty } from '@/lib/loyalty';
+import { getCurrentCashSession, registerOrderInCash } from '@/lib/cash-register';
 
 interface CartItem {
   id: string;
@@ -32,6 +28,9 @@ export default function CheckoutPage() {
   const [redeemDiscount, setRedeemDiscount] = useState(false);
   const loyaltySettings = getLoyaltySettings();
 
+  // Caixa
+  const [isCashOpen, setIsCashOpen] = useState(true);
+
   // Endereço e CEP
   const [cep, setCep] = useState('');
   const [loadingCep, setLoadingCep] = useState(false);
@@ -53,6 +52,7 @@ export default function CheckoutPage() {
 
   const [orderSubmitted, setOrderSubmitted] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
+  const [generatedOrderNumber, setGeneratedOrderNumber] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('garagem_cart_items');
@@ -63,9 +63,12 @@ export default function CheckoutPage() {
         console.error(e);
       }
     }
+
+    // Verifica se o caixa do estabelecimento está aberto
+    const sess = getCurrentCashSession();
+    setIsCashOpen(sess.isOpen);
   }, []);
 
-  // Busca perfil de fidelidade assim que o cliente digita o telefone
   useEffect(() => {
     if (phone.length >= 8) {
       const profile = getCustomerLoyaltyByPhone(phone);
@@ -79,7 +82,6 @@ export default function CheckoutPage() {
     }
   }, [phone]);
 
-  // Subtotais
   const subtotal = cartItems.reduce(
     (acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity,
     0
@@ -125,7 +127,22 @@ export default function CheckoutPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Salva a compra e acumula os pontos de fidelidade do cliente
+    // 1. Registra o pedido no caixa atual e recebe o número sequencial (ex: Pedido #1)
+    const result = registerOrderInCash({
+      customerName: name,
+      phone,
+      total: finalTotal,
+      paymentMethod,
+    });
+
+    if (!result.sessionIsOpen) {
+      alert('O caixa do estabelecimento se encontra fechado no momento. Abra o caixa no painel Admin!');
+      return;
+    }
+
+    setGeneratedOrderNumber(result.orderNumber);
+
+    // 2. Acumula os pontos de fidelidade
     const points = addOrderPoints(name, phone, finalTotal, redeemDiscount);
     setEarnedPoints(points);
 
@@ -137,18 +154,19 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4 text-center">
         <CheckCircle size={64} className="text-emerald-500 mb-4" />
+        <span className="px-4 py-1.5 bg-neutral-900 text-white font-bold rounded-full text-sm mb-3">
+          Pedido #{generatedOrderNumber}
+        </span>
         <h1 className="text-2xl font-bold text-neutral-900 mb-2">Pedido Recebido com Sucesso!</h1>
         <p className="text-neutral-600 mb-4 max-w-sm">
-          Seu pedido foi enviado para a Garagem.Com. Em breve iniciaremos o preparo.
+          Seu pedido <strong>#{generatedOrderNumber}</strong> foi enviado para a Garagem.Com. Em breve iniciaremos o preparo.
         </p>
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 max-w-sm w-full text-amber-900 text-sm">
           <div className="flex items-center justify-center gap-2 font-bold text-base mb-1">
             <Award className="text-amber-600" size={20} /> +{earnedPoints} Pontos Acumulados!
           </div>
-          <p>
-            Parabéns! Seus dados e pontos foram salvos para a sua próxima compra.
-          </p>
+          <p>Seus dados e pontos foram salvos para a sua próxima compra.</p>
         </div>
 
         <Link
@@ -174,6 +192,16 @@ export default function CheckoutPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 mt-6">
+        {!isCashOpen && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-amber-900 flex items-center gap-3">
+            <AlertTriangle className="text-amber-600 flex-shrink-0" size={24} />
+            <div className="text-sm">
+              <span className="font-bold block">Aviso: Caixa Fechado</span>
+              <span>O estabelecimento está com o caixa fechado no momento. Abra o caixa no menu Admin para permitir o recebimento de novos pedidos.</span>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Resumo do Pedido */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3 shadow-sm">
@@ -198,7 +226,7 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Seus Dados + Programa de Fidelidade */}
+          {/* Seus Dados */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Seus Dados</h2>
             <div>
@@ -225,7 +253,6 @@ export default function CheckoutPage() {
               />
             </div>
 
-            {/* Banner de Fidelidade do Cliente */}
             {loyaltyProfile && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2 text-amber-900">
                 <div className="flex justify-between items-center">
@@ -346,7 +373,6 @@ export default function CheckoutPage() {
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Forma de Pagamento</h2>
 
-            {/* PIX */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
@@ -361,7 +387,6 @@ export default function CheckoutPage() {
               </div>
             </label>
 
-            {/* Cartão de Crédito Online */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
@@ -377,7 +402,6 @@ export default function CheckoutPage() {
               <CreditCard size={18} className="text-neutral-400" />
             </label>
 
-            {/* Cartão de Débito Online */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
@@ -475,7 +499,7 @@ export default function CheckoutPage() {
             </label>
           </div>
 
-          {/* Resumo Final de Valores */}
+          {/* Resumo Final */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-2 shadow-sm">
             <div className="flex justify-between text-neutral-600 text-sm">
               <span>Subtotal (Produtos):</span>
@@ -508,7 +532,8 @@ export default function CheckoutPage() {
 
           <button
             type="submit"
-            className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-md text-lg"
+            disabled={!isCashOpen}
+            className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-md text-lg"
           >
             Confirmar e Enviar Pedido (R$ {finalTotal.toFixed(2).replace('.', ',')})
           </button>
