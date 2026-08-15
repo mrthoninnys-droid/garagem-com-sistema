@@ -3,8 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
-  CheckCircle,
-  Clock,
   Truck,
   Printer,
   Volume2,
@@ -12,7 +10,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { getCurrentCashSession, ShiftOrder } from '@/lib/cash-register';
-import { syncIFoodOrders } from '@/lib/ifood';
 
 interface OrderWithDetails extends ShiftOrder {
   status: 'preparo' | 'pronto' | 'saiu' | 'entregue';
@@ -118,7 +115,7 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
-      <style jsx global>{`
+      <style>{`
         @media print {
           body * {
             visibility: hidden;

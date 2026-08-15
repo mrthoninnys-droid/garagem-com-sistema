@@ -28,8 +28,8 @@ import {
 } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
-  const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Formulário de Login
@@ -77,7 +77,7 @@ export default function AdminDashboardPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
         <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
         <p className="text-sm font-bold text-neutral-800">Carregando painel...</p>
       </div>
@@ -103,7 +103,6 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          {/* FORMULÁRIO DE LOGIN */}
           {authMode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
@@ -146,7 +145,6 @@ export default function AdminDashboardPage() {
               </button>
             </form>
           ) : (
-            /* FORMULÁRIO DE CADASTRO */
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">Nome do Estabelecimento</label>
@@ -229,7 +227,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // PAINEL DE GESTÃO (Exibido após o login)
+  // PAINEL DE GESTÃO (Exibido após login)
   const adminModules = [
     {
       title: 'Controle de Caixa',
