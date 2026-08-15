@@ -9,7 +9,6 @@ export interface StoreAccount {
 const STORAGE_ACCOUNTS = 'garagem_store_accounts';
 const STORAGE_CURRENT_SESSION = 'garagem_active_store_session';
 
-// 1. Obter todas as lojas cadastradas
 export function getRegisteredStores(): StoreAccount[] {
   if (typeof window === 'undefined') return [];
   const saved = localStorage.getItem(STORAGE_ACCOUNTS);
@@ -21,7 +20,6 @@ export function getRegisteredStores(): StoreAccount[] {
   }
 }
 
-// 2. Cadastrar uma Nova Loja
 export function registerNewStore(storeName: string, email: string, password: string): { success: boolean; message: string } {
   const stores = getRegisteredStores();
   const cleanEmail = email.trim().toLowerCase();
@@ -48,7 +46,6 @@ export function registerNewStore(storeName: string, email: string, password: str
   return { success: true, message: 'Loja cadastrada com sucesso!' };
 }
 
-// 3. Fazer Login na Loja
 export function loginStoreAccount(email: string, password: string): { success: boolean; message: string } {
   const stores = getRegisteredStores();
   const cleanEmail = email.trim().toLowerCase();
@@ -66,14 +63,13 @@ export function loginStoreAccount(email: string, password: string): { success: b
   return { success: true, message: 'Login realizado com sucesso!' };
 }
 
-// 4. Obter a Loja Logada Atualmente (Verificação Estrita)
 export function getCurrentActiveStore(): StoreAccount | null {
   if (typeof window === 'undefined') return null;
   const saved = localStorage.getItem(STORAGE_CURRENT_SESSION);
   if (!saved) return null;
   try {
     const parsed = JSON.parse(saved);
-    if (parsed && parsed.email && parsed.storeName) {
+    if (parsed && parsed.email) {
       return parsed;
     }
     return null;
@@ -82,10 +78,8 @@ export function getCurrentActiveStore(): StoreAccount | null {
   }
 }
 
-// 5. Encerrar Sessão (Logout)
 export function logoutStoreAccount() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_CURRENT_SESSION);
-    localStorage.removeItem('garagem_admin_session'); // Remove chaves antigas de teste
   }
 }
