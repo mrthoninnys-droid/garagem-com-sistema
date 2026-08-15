@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Layout } from '@/components/layout';
-import { BarChart3, TrendingUp, DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
+import { BarChart3, DollarSign, ShoppingCart, Users, Package } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 interface MetricCard {

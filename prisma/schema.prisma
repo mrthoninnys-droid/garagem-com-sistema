@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -205,7 +205,7 @@ model Order {
   
   // Pagamento
   paymentMethod   PaymentMethod
-  paymentStatus   PaymentStatus @default(PENDING
+  paymentStatus   PaymentStatus @default(PENDING)
   pixKey          String?  // PIX key/QR code
   pixQRCode       String?  // Base64 encoded QR code
   changeAmount    Float?   // Para pagamento em dinheiro
