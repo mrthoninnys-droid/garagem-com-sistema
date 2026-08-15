@@ -1,15 +1,85 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CheckoutPage() {
+  // Dados do Cliente
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+
+  // Endereço e CEP
+  const [cep, setCep] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [complement, setComplement] = useState('');
+  const [deliveryTax, setDeliveryTax] = useState<number | null>(null);
+  const [cepError, setCepError] = useState('');
+
+  // Pagamento
   const [paymentMethod, setPaymentMethod] = useState('pix');
+  const [cardName, setCardName] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+
   const [orderSubmitted, setOrderSubmitted] = useState(false);
+
+  // Calcula a taxa exata de entrega de acordo com a região/cidade/CEP
+  const calculateDeliveryTax = (cityFetched: string, cepClean: string) => {
+    const prefix = parseInt(cepClean.substring(0, 2), 10);
+
+    // Regras de taxa por região (você pode ajustar os valores como quiser):
+    if (cityFetched.toLowerCase().includes('são paulo') || cityFetched.toLowerCase().includes('sao paulo')) {
+      return prefix <= 5 ? 6.00 : 9.00;
+    } else if (prefix >= 20 && prefix <= 28) {
+      return 12.00; // Rio de Janeiro
+    } else if (prefix >= 29 && prefix <= 299) {
+      return 7.00; // Espírito Santo
+    }
+    return 10.00; // Demais regiões
+  };
+
+  // Busca do CEP via API do ViaCEP
+  const handleSearchCep = async () => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      setCepError('Digite um CEP válido com 8 dígitos.');
+      return;
+    }
+
+    setCepError('');
+    setLoadingCep(true);
+
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+
+      if (data.erro) {
+        setCepError('CEP não encontrado. Digite o endereço manualmente.');
+        setDeliveryTax(8.00); // Taxa padrão caso não localize
+      } else {
+        setStreet(data.logradouro || '');
+        setNeighborhood(data.bairro || '');
+        setCity(data.localidade || '');
+        setState(data.uf || '');
+
+        // Define taxa personalizada por região
+        const tax = calculateDeliveryTax(data.localidade || '', cleanCep);
+        setDeliveryTax(tax);
+      }
+    } catch {
+      setCepError('Erro ao buscar o CEP. Digite o endereço manualmente.');
+      setDeliveryTax(8.00);
+    } finally {
+      setLoadingCep(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +90,7 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4 text-center">
         <CheckCircle size={64} className="text-emerald-500 mb-4" />
-        <h1 className="text-2xl font-bold text-neutral-900 mb-2">Pedido Recebido!</h1>
+        <h1 className="text-2xl font-bold text-neutral-900 mb-2">Pedido Recebido com Sucesso!</h1>
         <p className="text-neutral-600 mb-6 max-w-sm">
           Seu pedido foi enviado para a Garagem.Com. Em breve iniciaremos o preparo.
         </p>
@@ -48,8 +118,8 @@ export default function CheckoutPage() {
 
       <div className="max-w-2xl mx-auto px-4 mt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Dados do Cliente */}
-          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4">
+          {/* Seus Dados */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Seus Dados</h2>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Nome Completo</label>
@@ -75,26 +145,110 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Endereço de Entrega */}
-          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4">
+          {/* Endereço por CEP */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Endereço de Entrega</h2>
+            
+            {/* Campo CEP */}
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Rua, Número e Bairro</label>
-              <textarea
-                required
-                rows={3}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Rua das Flores, 123 - Apto 42 - Centro"
+              <label className="block text-sm font-medium text-neutral-700 mb-1">CEP</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={9}
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
+                  placeholder="00000-000"
+                  className="flex-1 p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={handleSearchCep}
+                  disabled={loadingCep}
+                  className="px-4 py-2.5 bg-neutral-900 text-white rounded-lg font-medium hover:bg-neutral-800 flex items-center gap-2"
+                >
+                  {loadingCep ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                  Buscar CEP
+                </button>
+              </div>
+              {cepError && <p className="text-xs text-red-500 mt-1">{cepError}</p>}
+            </div>
+
+            {/* Destaque da Taxa de Entrega da Região */}
+            {deliveryTax !== null && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm font-medium flex justify-between items-center">
+                <span>Taxa de Entrega da sua Região:</span>
+                <span className="text-base font-bold">R$ {deliveryTax.toFixed(2).replace('.', ',')}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Rua / Logradouro</label>
+                <input
+                  type="text"
+                  required
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
+                  placeholder="Nome da rua"
+                  className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Número</label>
+                <input
+                  type="text"
+                  required
+                  value={number}
+                  onChange={(e) => setNumber(e.target.value)}
+                  placeholder="123"
+                  className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Bairro</label>
+                <input
+                  type="text"
+                  required
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  placeholder="Bairro"
+                  className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Cidade / UF</label>
+                <input
+                  type="text"
+                  required
+                  value={city ? `${city} - ${state}` : ''}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Cidade - UF"
+                  className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Complemento (Opcional)</label>
+              <input
+                type="text"
+                value={complement}
+                onChange={(e) => setComplement(e.target.value)}
+                placeholder="Apto, Bloco, Ponto de referência"
                 className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
 
-          {/* Forma de Pagamento */}
-          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3">
+          {/* Formas de Pagamento */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Forma de Pagamento</h2>
             
+            {/* PIX */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
@@ -103,18 +257,112 @@ export default function CheckoutPage() {
                 checked={paymentMethod === 'pix'}
                 onChange={(e) => setPaymentMethod(e.target.value)}
               />
-              <span className="font-medium text-neutral-800">Pix</span>
+              <div>
+                <span className="font-medium text-neutral-800 block">PIX</span>
+                <span className="text-xs text-neutral-500">Aprovação instantânea</span>
+              </div>
             </label>
 
+            {/* Cartão de Crédito Online */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
                 name="payment"
-                value="card"
-                checked={paymentMethod === 'card'}
+                value="credit_online"
+                checked={paymentMethod === 'credit_online'}
                 onChange={(e) => setPaymentMethod(e.target.value)}
               />
-              <span className="font-medium text-neutral-800">Cartão de Crédito / Débito na Entrega</span>
+              <div className="flex-1">
+                <span className="font-medium text-neutral-800 block">Cartão de Crédito (Online)</span>
+                <span className="text-xs text-neutral-500">Pagamento online imediato</span>
+              </div>
+              <CreditCard size={18} className="text-neutral-400" />
+            </label>
+
+            {/* Cartão de Débito Online */}
+            <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
+              <input
+                type="radio"
+                name="payment"
+                value="debit_online"
+                checked={paymentMethod === 'debit_online'}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+              <div className="flex-1">
+                <span className="font-medium text-neutral-800 block">Cartão de Débito (Online)</span>
+                <span className="text-xs text-neutral-500">Débito em conta online</span>
+              </div>
+              <CreditCard size={18} className="text-neutral-400" />
+            </label>
+
+            {/* Formulário do Cartão quando selecionado Crédito ou Débito Online */}
+            {(paymentMethod === 'credit_online' || paymentMethod === 'debit_online') && (
+              <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg space-y-3 mt-2">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-600 mb-1">Nome Impresso no Cartão</label>
+                  <input
+                    type="text"
+                    required
+                    value={cardName}
+                    onChange={(e) => setCardName(e.target.value)}
+                    placeholder="Nome do titular"
+                    className="w-full p-2 border border-neutral-300 rounded text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-600 mb-1">Número do Cartão</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={19}
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    placeholder="0000 0000 0000 0000"
+                    className="w-full p-2 border border-neutral-300 rounded text-sm bg-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1">Validade (MM/AA)</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={5}
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(e.target.value)}
+                      placeholder="12/28"
+                      className="w-full p-2 border border-neutral-300 rounded text-sm bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1">Código CVV</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={4}
+                      value={cardCvc}
+                      onChange={(e) => setCardCvc(e.target.value)}
+                      placeholder="123"
+                      className="w-full p-2 border border-neutral-300 rounded text-sm bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Pagamento na Entrega */}
+            <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
+              <input
+                type="radio"
+                name="payment"
+                value="delivery_machine"
+                checked={paymentMethod === 'delivery_machine'}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+              <div>
+                <span className="font-medium text-neutral-800 block">Maquininha na Entrega</span>
+                <span className="text-xs text-neutral-500">Cartão de Crédito ou Débito ao receber</span>
+              </div>
             </label>
 
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
@@ -125,7 +373,9 @@ export default function CheckoutPage() {
                 checked={paymentMethod === 'cash'}
                 onChange={(e) => setPaymentMethod(e.target.value)}
               />
-              <span className="font-medium text-neutral-800">Dinheiro</span>
+              <div>
+                <span className="font-medium text-neutral-800 block">Dinheiro na Entrega</span>
+              </div>
             </label>
           </div>
 
