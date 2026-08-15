@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard } from 'lucide-react';
 import Link from 'next/link';
+import { calculateFeeForAddress } from '@/lib/delivery-rates';
 
 export default function CheckoutPage() {
   // Dados do Cliente
@@ -30,22 +31,7 @@ export default function CheckoutPage() {
 
   const [orderSubmitted, setOrderSubmitted] = useState(false);
 
-  // Calcula a taxa exata de entrega de acordo com a região/cidade/CEP
-  const calculateDeliveryTax = (cityFetched: string, cepClean: string) => {
-    const prefix = parseInt(cepClean.substring(0, 2), 10);
-
-    // Regras de taxa por região (você pode ajustar os valores como quiser):
-    if (cityFetched.toLowerCase().includes('são paulo') || cityFetched.toLowerCase().includes('sao paulo')) {
-      return prefix <= 5 ? 6.00 : 9.00;
-    } else if (prefix >= 20 && prefix <= 28) {
-      return 12.00; // Rio de Janeiro
-    } else if (prefix >= 29 && prefix <= 299) {
-      return 7.00; // Espírito Santo
-    }
-    return 10.00; // Demais regiões
-  };
-
-  // Busca do CEP via API do ViaCEP
+  // Busca do CEP via ViaCEP + cálculo da taxa configurada no Admin
   const handleSearchCep = async () => {
     const cleanCep = cep.replace(/\D/g, '');
     if (cleanCep.length !== 8) {
@@ -62,20 +48,20 @@ export default function CheckoutPage() {
 
       if (data.erro) {
         setCepError('CEP não encontrado. Digite o endereço manualmente.');
-        setDeliveryTax(8.00); // Taxa padrão caso não localize
+        setDeliveryTax(10.00);
       } else {
         setStreet(data.logradouro || '');
         setNeighborhood(data.bairro || '');
         setCity(data.localidade || '');
         setState(data.uf || '');
 
-        // Define taxa personalizada por região
-        const tax = calculateDeliveryTax(data.localidade || '', cleanCep);
+        // Calcula a taxa definida no painel Admin de acordo com a cidade/CEP
+        const tax = calculateFeeForAddress(data.localidade || '', cleanCep);
         setDeliveryTax(tax);
       }
     } catch {
       setCepError('Erro ao buscar o CEP. Digite o endereço manualmente.');
-      setDeliveryTax(8.00);
+      setDeliveryTax(10.00);
     } finally {
       setLoadingCep(false);
     }
@@ -174,7 +160,7 @@ export default function CheckoutPage() {
               {cepError && <p className="text-xs text-red-500 mt-1">{cepError}</p>}
             </div>
 
-            {/* Destaque da Taxa de Entrega da Região */}
+            {/* Taxa de Entrega calculada dinamicamente */}
             {deliveryTax !== null && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm font-medium flex justify-between items-center">
                 <span>Taxa de Entrega da sua Região:</span>
@@ -295,7 +281,7 @@ export default function CheckoutPage() {
               <CreditCard size={18} className="text-neutral-400" />
             </label>
 
-            {/* Formulário do Cartão quando selecionado Crédito ou Débito Online */}
+            {/* Dados do Cartão se selecionado Débito ou Crédito Online */}
             {(paymentMethod === 'credit_online' || paymentMethod === 'debit_online') && (
               <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg space-y-3 mt-2">
                 <div>
