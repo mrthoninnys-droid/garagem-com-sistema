@@ -25,11 +25,12 @@ interface CartItem {
   id: string;
   productId: string;
   name: string;
-  price: number;
-  quantity: number;
   productName: string;
+  price: number;
   unitPrice: number;
-  selectedOptions?: Record<string, string>;
+  quantity: number;
+  selectedOptions?: Array<{ optionId: string; optionName: string; priceExtra: number }>;
+  notes?: string;
 }
 
 export default function CustomerPage() {
@@ -42,7 +43,6 @@ export default function CustomerPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simular carregamento de dados
     const loadData = async () => {
       try {
         setTimeout(() => {
@@ -102,7 +102,7 @@ export default function CustomerPage() {
     return matchesCategory && matchesSearch;
   });
 
-  // Função para adicionar produto ao carrinho e abrir a aba
+  // Adicionar produto ao carrinho
   const handleAddToCart = (product: Product) => {
     setCartItems((prevItems) => {
       const existingItem = prevItems.find((item) => item.productId === product.id);
@@ -119,19 +119,37 @@ export default function CustomerPage() {
           id: product.id,
           productId: product.id,
           name: product.name,
+          productName: product.name,
           price: product.price,
+          unitPrice: product.price,
           quantity: 1,
+          selectedOptions: [],
         },
       ];
     });
 
-    // Abre o carrinho na tela imediatamente
     setCartOpen(true);
+  };
+
+  // Alterar quantidade no carrinho
+  const handleUpdateQuantity = (index: number, quantity: number) => {
+    if (quantity <= 0) {
+      handleRemoveItem(index);
+      return;
+    }
+    setCartItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, quantity } : item))
+    );
+  };
+
+  // Remover item do carrinho
+  const handleRemoveItem = (index: number) => {
+    setCartItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Cálculos de totais
   const totalItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const subtotal = cartItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const deliveryTax = 5.0;
   const total = subtotal > 0 ? subtotal + deliveryTax : 0;
 
@@ -247,6 +265,8 @@ export default function CustomerPage() {
         total={total}
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
+        onUpdateQuantity={handleUpdateQuantity}
+        onRemoveItem={handleRemoveItem}
         onCheckout={() => {
           window.location.href = '/checkout';
         }}
