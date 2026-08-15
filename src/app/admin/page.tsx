@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,15 +14,21 @@ import {
   UserCheck,
   LogOut,
   Eye,
+  Store,
 } from 'lucide-react';
-import { logoutAdmin } from '@/lib/auth';
+import { getCurrentActiveStore, logoutStoreAccount, StoreAccount } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
+
+  useEffect(() => {
+    setActiveStore(getCurrentActiveStore());
+  }, []);
 
   const handleLogout = () => {
-    logoutAdmin();
-    router.push('/admin/login');
+    logoutStoreAccount();
+    router.replace('/admin/login');
   };
 
   const adminModules = [
@@ -87,11 +94,21 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-neutral-50 pb-12">
       <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-neutral-900">Painel de Gestão - Garagem.Com</h1>
-            <p className="text-xs text-neutral-500">Central Administrativa Operacional</p>
-          </div>
           <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-neutral-900 text-white rounded-lg flex items-center justify-center">
+              <Store size={20} />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-neutral-900">
+                {activeStore ? activeStore.storeName : 'Garagem.Com'}
+              </h1>
+              <p className="text-xs text-neutral-500">
+                {activeStore ? activeStore.email : 'Painel de Gestão'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
             <Link
               href="/customer"
               target="_blank"
@@ -99,6 +116,7 @@ export default function AdminDashboardPage() {
             >
               <Eye size={16} /> Cardápio
             </Link>
+
             <button
               onClick={handleLogout}
               className="px-3.5 py-2 bg-red-50 text-red-600 hover:bg-red-100 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors border border-red-200"

@@ -1,26 +1,48 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+'use client';
 
-const inter = Inter({ subsets: ['latin'] });
+import { useEffect, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { getCurrentActiveStore } from '@/lib/auth';
+import { Loader2 } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'GARAGEM.COM - Sistema de Gestão e PDV para Restaurantes',
-  description:
-    'Sistema completo de gerenciamento de pedidos, cardápio digital e ponto de venda para restaurantes e delivery',
-  icons: {
-    icon: '/favicon.ico',
-  },
-};
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="pt-BR">
-      <body className={inter.className}>{children}</body>
-    </html>
-  );
+  useEffect(() => {
+    const isPublicAdminRoute = pathname === '/admin/login' || pathname === '/admin/register';
+    const activeStore = getCurrentActiveStore();
+
+    if (isPublicAdminRoute) {
+      setAuthorized(true);
+      setLoading(false);
+      return;
+    }
+
+    if (!activeStore) {
+      setAuthorized(false);
+      setLoading(false);
+      router.replace('/admin/login');
+    } else {
+      setAuthorized(true);
+      setLoading(false);
+    }
+  }, [pathname, router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
+        <Loader2 size={32} className="animate-spin text-neutral-800 mb-2" />
+        <p className="text-xs font-semibold text-neutral-600">Verificando credenciais de acesso...</p>
+      </div>
+    );
+  }
+
+  if (!authorized && pathname !== '/admin/login' && pathname !== '/admin/register') {
+    return null;
+  }
+
+  return <>{children}</>;
 }
