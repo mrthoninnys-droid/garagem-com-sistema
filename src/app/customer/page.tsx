@@ -41,20 +41,30 @@ export default function CustomerPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pausedIds, setPausedIds] = useState<string[]>([]);
 
-  // Carrega itens salvos previamente se houver
+  // Carrega carrinho e lista de produtos pausados do localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('garagem_cart_items');
-    if (saved) {
+    const savedCart = localStorage.getItem('garagem_cart_items');
+    if (savedCart) {
       try {
-        setCartItems(JSON.parse(saved));
+        setCartItems(JSON.parse(savedCart));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const savedPaused = localStorage.getItem('garagem_menu_paused');
+    if (savedPaused) {
+      try {
+        setPausedIds(JSON.parse(savedPaused));
       } catch (e) {
         console.error(e);
       }
     }
   }, []);
 
-  // Salva o carrinho no localStorage sempre que houver mudanças
+  // Salva o carrinho no localStorage sempre que houver alterações
   useEffect(() => {
     localStorage.setItem('garagem_cart_items', JSON.stringify(cartItems));
   }, [cartItems]);
@@ -113,11 +123,14 @@ export default function CustomerPage() {
     loadData();
   }, []);
 
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory = !selectedCategory || p.categoryId === selectedCategory;
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Filtra produtos removendo os pausados e aplicando categoria/busca
+  const filteredProducts = products
+    .filter((p) => !pausedIds.includes(p.id))
+    .filter((p) => {
+      const matchesCategory = !selectedCategory || p.categoryId === selectedCategory;
+      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
 
   const handleAddToCart = (product: Product) => {
     setCartItems((prevItems) => {
@@ -162,7 +175,10 @@ export default function CustomerPage() {
   };
 
   const totalItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = cartItems.reduce((acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity, 0);
+  const subtotal = cartItems.reduce(
+    (acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity,
+    0
+  );
 
   return (
     <Layout showNavigation={false}>
@@ -172,7 +188,9 @@ export default function CustomerPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-neutral-900">Menu Digital</h1>
-              <p className="text-neutral-600 text-sm mt-1">Pizzaria & Delivery Garagem.Com</p>
+              <p className="text-neutral-600 text-sm mt-1">
+                Pizzaria & Delivery Garagem.Com
+              </p>
             </div>
             <button
               onClick={() => setCartOpen(!cartOpen)}
@@ -191,12 +209,16 @@ export default function CustomerPage() {
           <div className="bg-secondary/10 border border-secondary/20 rounded-lg p-3 flex items-center gap-3 text-sm">
             <MapPin size={18} className="text-secondary flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-neutral-900 font-semibold">Pizzaria & Delivery Garagem.Com</p>
-              <p className="text-neutral-600 text-xs">Entrega rápida na sua região</p>
+              <p className="text-neutral-900 font-semibold">
+                Pizzaria & Delivery Garagem.Com
+              </p>
+              <p className="text-neutral-600 text-xs">
+                Entrega rápida na sua região
+              </p>
             </div>
           </div>
 
-          {/* Search */}
+          {/* Busca */}
           <div className="mt-4 relative">
             <Search className="absolute left-3 top-3 text-neutral-400" size={20} />
             <input
@@ -229,7 +251,7 @@ export default function CustomerPage() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Listagem de Produtos */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -254,7 +276,7 @@ export default function CustomerPage() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <p className="text-neutral-600 mb-4">Nenhum produto encontrado</p>
+            <p className="text-neutral-600 mb-4">Nenhum produto disponível no momento</p>
             <button
               onClick={() => {
                 setSearchQuery('');
@@ -268,7 +290,7 @@ export default function CustomerPage() {
         )}
       </div>
 
-      {/* Cart Sidebar */}
+      {/* Carrinho Sidebar */}
       <CartSidebar
         items={cartItems}
         subtotal={subtotal}
