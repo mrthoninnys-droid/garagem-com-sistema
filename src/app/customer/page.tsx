@@ -102,7 +102,6 @@ export default function CustomerPage() {
     return matchesCategory && matchesSearch;
   });
 
-  // Adicionar produto ao carrinho
   const handleAddToCart = (product: Product) => {
     setCartItems((prevItems) => {
       const existingItem = prevItems.find((item) => item.productId === product.id);
@@ -131,7 +130,6 @@ export default function CustomerPage() {
     setCartOpen(true);
   };
 
-  // Alterar quantidade no carrinho
   const handleUpdateQuantity = (index: number, quantity: number) => {
     if (quantity <= 0) {
       handleRemoveItem(index);
@@ -142,14 +140,12 @@ export default function CustomerPage() {
     );
   };
 
-  // Remover item do carrinho
   const handleRemoveItem = (index: number) => {
     setCartItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Cálculos de totais
   const totalItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = cartItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+  const subtotal = cartItems.reduce((acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity, 0);
   const deliveryTax = 5.0;
   const total = subtotal > 0 ? subtotal + deliveryTax : 0;
 

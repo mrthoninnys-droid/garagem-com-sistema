@@ -1,12 +1,23 @@
 'use client';
 
 import { X, Trash2, Plus, Minus } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+
+// Função interna de formatação segura (não quebra a aplicação)
+const formatCurrency = (value: number = 0) => {
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value || 0);
+  } catch {
+    return `R$ ${(value || 0).toFixed(2)}`;
+  }
+};
 
 interface CartOption {
-  optionId: string;
-  optionName: string;
-  priceExtra: number;
+  optionId?: string;
+  optionName?: string;
+  priceExtra?: number;
 }
 
 interface CartItemProps {
@@ -14,34 +25,36 @@ interface CartItemProps {
   name?: string;
   unitPrice?: number;
   price?: number;
-  quantity: number;
+  quantity?: number;
   selectedOptions?: CartOption[];
   notes?: string;
 }
 
 interface CartSidebarProps {
-  items: CartItemProps[];
-  subtotal: number;
-  deliveryTax: number;
-  total: number;
-  isOpen: boolean;
-  onClose: () => void;
+  items?: CartItemProps[];
+  subtotal?: number;
+  deliveryTax?: number;
+  total?: number;
+  isOpen?: boolean;
+  onClose?: () => void;
   onUpdateQuantity?: (index: number, quantity: number) => void;
   onRemoveItem?: (index: number) => void;
   onCheckout?: () => void;
 }
 
 export function CartSidebar({
-  items,
-  subtotal,
-  deliveryTax,
-  total,
-  isOpen,
+  items = [],
+  subtotal = 0,
+  deliveryTax = 0,
+  total = 0,
+  isOpen = false,
   onClose,
   onUpdateQuantity,
   onRemoveItem,
   onCheckout,
 }: CartSidebarProps) {
+  const safeItems = Array.isArray(items) ? items : [];
+
   return (
     <>
       {/* Overlay mobile */}
@@ -71,15 +84,16 @@ export function CartSidebar({
 
         {/* Listagem de Itens */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {items.length === 0 ? (
+          {safeItems.length === 0 ? (
             <p className="text-center text-neutral-500 py-12">
               Seu carrinho está vazio
             </p>
           ) : (
-            items.map((item, index) => {
+            safeItems.map((item, index) => {
               const displayName = item.productName || item.name || 'Produto';
               const displayPrice = item.unitPrice ?? item.price ?? 0;
-              const options = item.selectedOptions || [];
+              const qty = item.quantity || 1;
+              const options = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
 
               return (
                 <div key={index} className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/50">
@@ -88,10 +102,10 @@ export function CartSidebar({
                       <h4 className="font-semibold text-neutral-900">{displayName}</h4>
                       {options.length > 0 && (
                         <ul className="text-xs text-neutral-600 mt-1 space-y-0.5">
-                          {options.map((opt) => (
-                            <li key={opt.optionId}>
-                              • {opt.optionName}
-                              {opt.priceExtra > 0 && ` (+${formatCurrency(opt.priceExtra)})`}
+                          {options.map((opt, optIndex) => (
+                            <li key={opt.optionId || optIndex}>
+                              • {opt.optionName || 'Opção'}
+                              {(opt.priceExtra || 0) > 0 && ` (+${formatCurrency(opt.priceExtra)})`}
                             </li>
                           ))}
                         </ul>
@@ -116,17 +130,17 @@ export function CartSidebar({
                       {onUpdateQuantity && (
                         <>
                           <button
-                            onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                            disabled={item.quantity <= 1}
+                            onClick={() => onUpdateQuantity(index, qty - 1)}
+                            disabled={qty <= 1}
                             className="p-1 hover:bg-neutral-100 disabled:opacity-30 rounded text-neutral-700"
                           >
                             <Minus size={14} />
                           </button>
                           <span className="w-6 text-center text-sm font-semibold text-neutral-900">
-                            {item.quantity}
+                            {qty}
                           </span>
                           <button
-                            onClick={() => onUpdateQuantity(index, item.quantity + 1)}
+                            onClick={() => onUpdateQuantity(index, qty + 1)}
                             className="p-1 hover:bg-neutral-100 rounded text-neutral-700"
                           >
                             <Plus size={14} />
@@ -135,7 +149,7 @@ export function CartSidebar({
                       )}
                     </div>
                     <span className="font-bold text-neutral-900">
-                      {formatCurrency(item.quantity * displayPrice)}
+                      {formatCurrency(qty * displayPrice)}
                     </span>
                   </div>
                 </div>
@@ -145,7 +159,7 @@ export function CartSidebar({
         </div>
 
         {/* Resumo e Botão de Finalizar */}
-        {items.length > 0 && (
+        {safeItems.length > 0 && (
           <div className="border-t border-neutral-200 p-4 bg-white space-y-3">
             <div className="flex justify-between text-sm text-neutral-600">
               <span>Subtotal:</span>
