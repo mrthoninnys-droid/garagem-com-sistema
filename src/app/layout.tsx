@@ -12,6 +12,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    // Remove qualquer resquício de teste antigo
+    localStorage.removeItem('garagem_admin_session');
+
     const isPublicAdminRoute = pathname === '/admin/login' || pathname === '/admin/register';
     const activeStore = getCurrentActiveStore();
 
@@ -35,7 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return (
       <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
         <Loader2 size={32} className="animate-spin text-neutral-800 mb-2" />
-        <p className="text-xs font-semibold text-neutral-600">Verificando credenciais de acesso...</p>
+        <p className="text-xs font-semibold text-neutral-600">Verificando autorização de acesso...</p>
       </div>
     );
   }
