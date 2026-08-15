@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import {
   DollarSign,
   ShoppingBag,
@@ -28,7 +27,8 @@ import {
   StoreAccount,
 } from '@/lib/auth';
 
-function AdminDashboardContent() {
+export default function AdminDashboardPage() {
+  const [mounted, setMounted] = useState(false);
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
@@ -44,6 +44,7 @@ function AdminDashboardContent() {
   const [regError, setRegError] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     setActiveStore(getCurrentActiveStore());
   }, []);
 
@@ -74,7 +75,17 @@ function AdminDashboardContent() {
     setActiveStore(null);
   };
 
-  // TELA DE AUTENTICAÇÃO (Exibida se não houver loja logada)
+  // 1. ANTES DA MONTAGEM: Garante 100% de igualdade entre o HTML do servidor e o primeiro render do cliente
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
+        <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
+        <p className="text-sm font-bold text-neutral-800">Carregando painel...</p>
+      </div>
+    );
+  }
+
+  // 2. TELA DE AUTENTICAÇÃO: Exibida se não houver loja logada
   if (!activeStore) {
     return (
       <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
@@ -217,7 +228,7 @@ function AdminDashboardContent() {
     );
   }
 
-  // PAINEL DE GESTÃO (Exibido após o login)
+  // 3. PAINEL DE GESTÃO: Exibido após login efetuado
   const adminModules = [
     {
       title: 'Controle de Caixa',
@@ -338,14 +349,3 @@ function AdminDashboardContent() {
     </div>
   );
 }
-
-// Desativa o SSR para eliminar completamente os erros de hidratação do React
-export default dynamic(() => Promise.resolve(AdminDashboardContent), {
-  ssr: false,
-  loading: () => (
-    <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
-      <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
-      <p className="text-sm font-bold text-neutral-800">Carregando painel...</p>
-    </div>
-  ),
-});
