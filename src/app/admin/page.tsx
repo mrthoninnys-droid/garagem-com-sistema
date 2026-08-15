@@ -15,21 +15,40 @@ import {
   LogOut,
   Eye,
   Store,
+  Loader2,
 } from 'lucide-react';
 import { getCurrentActiveStore, logoutStoreAccount, StoreAccount } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setActiveStore(getCurrentActiveStore());
-  }, []);
+    const store = getCurrentActiveStore();
+    if (!store) {
+      // Se não houver loja ativa logada, bloqueia a tela e redireciona na hora
+      router.replace('/admin/login');
+    } else {
+      setActiveStore(store);
+      setLoading(false);
+    }
+  }, [router]);
 
   const handleLogout = () => {
     logoutStoreAccount();
     router.replace('/admin/login');
   };
+
+  // Enquanto verifica o login, exibe a tela de carregamento e esconde todo o painel
+  if (loading || !activeStore) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
+        <Loader2 size={32} className="animate-spin text-neutral-800 mb-2" />
+        <p className="text-xs font-semibold text-neutral-600">Verificando acesso da loja...</p>
+      </div>
+    );
+  }
 
   const adminModules = [
     {
@@ -92,6 +111,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
+      {/* Header com dados da loja conectada */}
       <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -100,11 +120,9 @@ export default function AdminDashboardPage() {
             </div>
             <div>
               <h1 className="text-base font-bold text-neutral-900">
-                {activeStore ? activeStore.storeName : 'Garagem.Com'}
+                {activeStore.storeName}
               </h1>
-              <p className="text-xs text-neutral-500">
-                {activeStore ? activeStore.email : 'Painel de Gestão'}
-              </p>
+              <p className="text-xs text-neutral-500">{activeStore.email}</p>
             </div>
           </div>
 
@@ -127,6 +145,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Grid de Módulos */}
       <div className="max-w-5xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {adminModules.map((mod) => {
