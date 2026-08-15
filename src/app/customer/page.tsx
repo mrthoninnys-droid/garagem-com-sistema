@@ -21,20 +21,30 @@ interface Product {
   categoryId: string;
 }
 
+interface CartItem {
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  productName: string;
+  unitPrice: number;
+  selectedOptions?: Record<string, string>;
+}
+
 export default function CustomerPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState(0);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Simular carregamento de dados
     const loadData = async () => {
       try {
-        // Em produção, isso seria um fetch para a API
         setTimeout(() => {
           setCategories([
             { id: '1', name: 'Pizzas', icon: 'Pizza' },
@@ -92,10 +102,38 @@ export default function CustomerPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const handleAddToCart = () => {
-    setCartItems((prev) => prev + 1);
-    // Aqui você adicionaria a lógica de carrinho real
+  // Função para adicionar produto ao carrinho e abrir a aba
+  const handleAddToCart = (product: Product) => {
+    setCartItems((prevItems) => {
+      const existingItem = prevItems.find((item) => item.productId === product.id);
+      if (existingItem) {
+        return prevItems.map((item) =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [
+        ...prevItems,
+        {
+          id: product.id,
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+        },
+      ];
+    });
+
+    // Abre o carrinho na tela imediatamente
+    setCartOpen(true);
   };
+
+  // Cálculos de totais
+  const totalItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const deliveryTax = 5.0;
+  const total = subtotal > 0 ? subtotal + deliveryTax : 0;
 
   return (
     <Layout showNavigation={false}>
@@ -112,9 +150,9 @@ export default function CustomerPage() {
               className="relative p-3 bg-primary text-white rounded-lg hover:bg-primary/90"
             >
               <ShoppingCart size={24} />
-              {cartItems > 0 && (
+              {totalItemCount > 0 && (
                 <span className="absolute top-0 right-0 -mt-2 -mr-2 bg-danger text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
-                  {cartItems}
+                  {totalItemCount}
                 </span>
               )}
             </button>
@@ -178,9 +216,8 @@ export default function CustomerPage() {
               <ProductCard
                 key={product.id}
                 {...product}
-                onAddToCart={handleAddToCart}
+                onAddToCart={() => handleAddToCart(product)}
                 onQuickView={(id) => {
-                  // Abrir modal com detalhes do produto
                   console.log('Abrir detalhes:', id);
                 }}
               />
@@ -204,14 +241,13 @@ export default function CustomerPage() {
 
       {/* Cart Sidebar */}
       <CartSidebar
-        items={[]}
-        subtotal={0}
-        deliveryTax={5}
-        total={0}
+        items={cartItems}
+        subtotal={subtotal}
+        deliveryTax={deliveryTax}
+        total={total}
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
         onCheckout={() => {
-          // Ir para página de checkout
           window.location.href = '/checkout';
         }}
       />
