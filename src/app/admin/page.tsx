@@ -22,30 +22,26 @@ import { getCurrentActiveStore, logoutStoreAccount, StoreAccount } from '@/lib/a
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const store = getCurrentActiveStore();
     if (!store) {
-      // Se não houver loja ativa logada, bloqueia a tela e redireciona na hora
-      router.replace('/admin/login');
+      window.location.href = '/admin/login';
     } else {
       setActiveStore(store);
-      setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   const handleLogout = () => {
     logoutStoreAccount();
-    router.replace('/admin/login');
+    window.location.href = '/admin/login';
   };
 
-  // Enquanto verifica o login, exibe a tela de carregamento e esconde todo o painel
-  if (loading || !activeStore) {
+  if (!activeStore) {
     return (
       <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
-        <Loader2 size={32} className="animate-spin text-neutral-800 mb-2" />
-        <p className="text-xs font-semibold text-neutral-600">Verificando acesso da loja...</p>
+        <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
+        <p className="text-sm font-bold text-neutral-800">Carregando painel administrativo...</p>
       </div>
     );
   }
@@ -111,7 +107,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
-      {/* Header com dados da loja conectada */}
       <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -119,9 +114,7 @@ export default function AdminDashboardPage() {
               <Store size={20} />
             </div>
             <div>
-              <h1 className="text-base font-bold text-neutral-900">
-                {activeStore.storeName}
-              </h1>
+              <h1 className="text-base font-bold text-neutral-900">{activeStore.storeName}</h1>
               <p className="text-xs text-neutral-500">{activeStore.email}</p>
             </div>
           </div>
@@ -145,7 +138,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Grid de Módulos */}
       <div className="max-w-5xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {adminModules.map((mod) => {
