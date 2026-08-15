@@ -1,0 +1,419 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USUÁRIOS E AUTENTICAÇÃO
+// ============================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(ATTENDANT)
+  
+  // Relacionamentos
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  ATTENDANT
+  KITCHEN
+  DELIVERY
+}
+
+// ============================================================================
+// CONFIGURAÇÕES DO NEGÓCIO
+// ============================================================================
+
+model Business {
+  id                  String   @id @default(cuid())
+  name                String
+  phone               String
+  email               String?
+  logo                String?
+  deliveryTaxFlat     Float    @default(5.0) // Taxa fixa de entrega
+  minDeliveryValue    Float    @default(20.0) // Valor mínimo para entrega
+  estimatedDeliveryTime Int   @default(30) // Tempo estimado em minutos
+  
+  // Horário de funcionamento
+  businessHours       BusinessHours[]
+  deliveryZones       DeliveryZone[]
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("businesses")
+}
+
+model BusinessHours {
+  id          String   @id @default(cuid())
+  businessId  String
+  dayOfWeek   Int      // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  openTime    String   // "10:00"
+  closeTime   String   // "23:00"
+  isClosed    Boolean  @default(false)
+  
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([businessId, dayOfWeek])
+  @@map("business_hours")
+}
+
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String   // "Centro", "Zona Leste", etc
+  zipCodes    String   // JSON: ["01000-000", "01001-000"]
+  deliveryTax Float
+  estimatedTime Int    // minutos
+  
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("delivery_zones")
+}
+
+// ============================================================================
+// CARDÁPIO E PRODUTOS
+// ============================================================================
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  icon        String?  // Nome do ícone Lucide
+  image       String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  
+  // Relacionamentos
+  products    Product[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  categoryId  String
+  name        String
+  description String?
+  price       Float
+  image       String?
+  
+  // Controle de disponibilidade
+  isActive    Boolean  @default(true)
+  stock       Int?     // null = ilimitado
+  
+  // Relacionamentos
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  optionGroups OptionGroup[]
+  orderItems  OrderItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("products")
+}
+
+// ============================================================================
+// OPÇÕES/COMPLEMENTOS DE PRODUTOS
+// ============================================================================
+
+model OptionGroup {
+  id          String   @id @default(cuid())
+  productId   String
+  name        String   // "Ponto da Carne", "Tamanho", etc
+  description String?
+  isRequired  Boolean  @default(false)
+  maxSelections Int   @default(1) // null = ilimitado
+  minSelections Int   @default(1)
+  
+  // Relacionamentos
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options     OptionItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("option_groups")
+}
+
+model OptionItem {
+  id          String   @id @default(cuid())
+  groupId     String
+  name        String   // "Mal Passado", "Ponto", "Bem Passado"
+  priceExtra  Float    @default(0.0)
+  
+  // Relacionamentos
+  group       OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  orderItemOptions OrderItemOption[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("option_items")
+}
+
+// ============================================================================
+// PEDIDOS
+// ============================================================================
+
+model Order {
+  id              String   @id @default(cuid())
+  
+  // Dados do cliente
+  customerId      String?
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  
+  // Endereço de entrega
+  deliveryAddress String?
+  deliveryCity    String?
+  deliveryZip     String?
+  deliveryNumber  String?
+  deliveryComplement String?
+  
+  // Tipo de pedido
+  orderType       OrderType @default(DELIVERY) // DELIVERY, TAKEAWAY, DINE_IN, PHONE
+  
+  // Status
+  status          OrderStatus @default(PENDING)
+  
+  // Pagamento
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus @default(PENDING
+  pixKey          String?  // PIX key/QR code
+  pixQRCode       String?  // Base64 encoded QR code
+  changeAmount    Float?   // Para pagamento em dinheiro
+  
+  // Valores
+  subtotal        Float
+  deliveryTax     Float    @default(0.0)
+  discount        Float    @default(0.0)
+  total           Float
+  
+  // Observações
+  notes           String?
+  
+  // Tempo
+  estimatedTime   Int      // minutos
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deliveredAt     DateTime?
+  
+  // Relacionamentos
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+  payments        Payment[]
+  statusHistory   OrderStatusHistory[]
+  
+  @@map("orders")
+}
+
+enum OrderType {
+  DELIVERY
+  TAKEAWAY
+  DINE_IN
+  PHONE
+}
+
+enum OrderStatus {
+  PENDING        // Pendente de confirmação
+  CONFIRMED      // Confirmado
+  PREPARING      // Em preparo
+  READY          // Pronto
+  SHIPPED        // Saiu para entrega (apenas delivery)
+  DELIVERED      // Entregue
+  CANCELLED      // Cancelado
+  REFUNDED       // Reembolsado
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  MONEY
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  FAILED
+  REFUNDED
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  productId       String
+  quantity        Int
+  unitPrice       Float
+  subtotal        Float    // quantity * unitPrice + extras
+  
+  // Observações específicas do item
+  notes           String?
+  
+  // Relacionamentos
+  order           Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product @relation(fields: [productId], references: [id])
+  options         OrderItemOption[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("order_items")
+}
+
+model OrderItemOption {
+  id              String   @id @default(cuid())
+  orderItemId     String
+  optionItemId    String
+  name            String   // "Mal Passado" (snapshot do name no momento do pedido)
+  priceExtra      Float    @default(0.0)
+  
+  // Relacionamentos
+  orderItem       OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  optionItem      OptionItem @relation(fields: [optionItemId], references: [id])
+  
+  @@map("order_item_options")
+}
+
+model OrderStatusHistory {
+  id              String   @id @default(cuid())
+  orderId         String
+  status          OrderStatus
+  changedAt       DateTime @default(now())
+  changedBy       String?  // ID do usuário que mudou
+  notes           String?
+  
+  // Relacionamentos
+  order           Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@map("order_status_history")
+}
+
+// ============================================================================
+// CLIENTES
+// ============================================================================
+
+model Customer {
+  id              String   @id @default(cuid())
+  name            String
+  phone           String   @unique
+  email           String?  @unique
+  
+  // Endereço padrão
+  defaultAddress  String?
+  defaultCity     String?
+  defaultZip      String?
+  defaultNumber   String?
+  
+  // Relacionamentos
+  orders          Order[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("customers")
+}
+
+// ============================================================================
+// PAGAMENTOS
+// ============================================================================
+
+model Payment {
+  id              String   @id @default(cuid())
+  orderId         String
+  amount          Float
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  
+  // PIX
+  pixKey          String?
+  pixQRCode       String?
+  pixTransactionId String?
+  
+  // Cartão
+  cardLastFour    String?
+  cardBrand       String?
+  
+  // Dinheiro
+  changeAmount    Float?
+  
+  // Relacionamentos
+  order           Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  paidAt          DateTime?
+  
+  @@map("payments")
+}
+
+// ============================================================================
+// NOTIFICAÇÕES (para sistema em tempo real)
+// ============================================================================
+
+model Notification {
+  id              String   @id @default(cuid())
+  orderId         String?
+  type            NotificationType
+  title           String
+  message         String
+  data            String?  // JSON com dados adicionais
+  read            Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("notifications")
+}
+
+enum NotificationType {
+  NEW_ORDER
+  ORDER_STATUS_CHANGED
+  PAYMENT_RECEIVED
+  DELIVERY_ARRIVED
+  REVIEW_REQUEST
+}
+
+// ============================================================================
+// AUDITORIA
+// ============================================================================
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  action          String   // "CREATE_ORDER", "UPDATE_STATUS", etc
+  entity          String   // "Order", "Product", etc
+  entityId        String
+  oldValue        String?  // JSON
+  newValue        String?  // JSON
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("audit_logs")
+}
