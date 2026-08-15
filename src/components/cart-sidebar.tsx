@@ -2,7 +2,6 @@
 
 import { X, Trash2, Plus, Minus } from 'lucide-react';
 
-// Função interna de formatação segura (não quebra a aplicação)
 const formatCurrency = (value: number = 0) => {
   try {
     return new Intl.NumberFormat('pt-BR', {
@@ -33,8 +32,6 @@ interface CartItemProps {
 interface CartSidebarProps {
   items?: CartItemProps[];
   subtotal?: number;
-  deliveryTax?: number;
-  total?: number;
   isOpen?: boolean;
   onClose?: () => void;
   onUpdateQuantity?: (index: number, quantity: number) => void;
@@ -45,8 +42,6 @@ interface CartSidebarProps {
 export function CartSidebar({
   items = [],
   subtotal = 0,
-  deliveryTax = 0,
-  total = 0,
   isOpen = false,
   onClose,
   onUpdateQuantity,
@@ -158,27 +153,17 @@ export function CartSidebar({
           )}
         </div>
 
-        {/* Resumo e Botão de Finalizar */}
+        {/* Resumo - Apenas Soma dos Produtos */}
         {safeItems.length > 0 && (
           <div className="border-t border-neutral-200 p-4 bg-white space-y-3">
-            <div className="flex justify-between text-sm text-neutral-600">
-              <span>Subtotal:</span>
-              <span>{formatCurrency(subtotal)}</span>
-            </div>
-            {deliveryTax > 0 && (
-              <div className="flex justify-between text-sm text-neutral-600">
-                <span>Taxa de entrega:</span>
-                <span>{formatCurrency(deliveryTax)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-lg font-bold text-neutral-900 border-t border-neutral-100 pt-3">
-              <span>Total:</span>
-              <span className="text-primary">{formatCurrency(total)}</span>
+            <div className="flex justify-between text-lg font-bold text-neutral-900">
+              <span>Soma dos Produtos:</span>
+              <span className="text-primary">{formatCurrency(subtotal)}</span>
             </div>
             {onCheckout && (
               <button
                 onClick={onCheckout}
-                className="w-full py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors shadow-md mt-2"
+                className="w-full py-3.5 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors shadow-md"
               >
                 Ir para Checkout
               </button>

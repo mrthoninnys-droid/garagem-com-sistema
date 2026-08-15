@@ -1,11 +1,23 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { calculateFeeForAddress } from '@/lib/delivery-rates';
 
+interface CartItem {
+  id: string;
+  name?: string;
+  productName?: string;
+  price?: number;
+  unitPrice?: number;
+  quantity: number;
+}
+
 export default function CheckoutPage() {
+  // Itens do Carrinho
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+
   // Dados do Cliente
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -31,7 +43,26 @@ export default function CheckoutPage() {
 
   const [orderSubmitted, setOrderSubmitted] = useState(false);
 
-  // Busca do CEP via ViaCEP + cálculo da taxa configurada no Admin
+  // Carrega produtos vindos do carrinho
+  useEffect(() => {
+    const saved = localStorage.getItem('garagem_cart_items');
+    if (saved) {
+      try {
+        setCartItems(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  // Cálculo dos Subtotais
+  const subtotal = cartItems.reduce(
+    (acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity,
+    0
+  );
+  const finalTotal = subtotal + (deliveryTax || 0);
+
+  // Busca do CEP via ViaCEP + cálculo da taxa
   const handleSearchCep = async () => {
     const cleanCep = cep.replace(/\D/g, '');
     if (cleanCep.length !== 8) {
@@ -48,20 +79,20 @@ export default function CheckoutPage() {
 
       if (data.erro) {
         setCepError('CEP não encontrado. Digite o endereço manualmente.');
-        setDeliveryTax(10.00);
+        setDeliveryTax(10.0);
       } else {
         setStreet(data.logradouro || '');
         setNeighborhood(data.bairro || '');
         setCity(data.localidade || '');
         setState(data.uf || '');
 
-        // Calcula a taxa definida no painel Admin de acordo com a cidade/CEP
+        // Calcula a taxa pela região cadastrada
         const tax = calculateFeeForAddress(data.localidade || '', cleanCep);
         setDeliveryTax(tax);
       }
     } catch {
       setCepError('Erro ao buscar o CEP. Digite o endereço manualmente.');
-      setDeliveryTax(10.00);
+      setDeliveryTax(10.0);
     } finally {
       setLoadingCep(false);
     }
@@ -69,6 +100,7 @@ export default function CheckoutPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    localStorage.removeItem('garagem_cart_items');
     setOrderSubmitted(true);
   };
 
@@ -104,6 +136,29 @@ export default function CheckoutPage() {
 
       <div className="max-w-2xl mx-auto px-4 mt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Resumo do Pedido */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3 shadow-sm">
+            <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2 flex items-center gap-2">
+              <ShoppingBag size={18} /> Resumo dos Produtos
+            </h2>
+            {cartItems.length === 0 ? (
+              <p className="text-sm text-neutral-500">Nenhum produto selecionado.</p>
+            ) : (
+              <div className="space-y-2 text-sm">
+                {cartItems.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-neutral-800">
+                    <span>
+                      {item.quantity}x {item.productName || item.name}
+                    </span>
+                    <span className="font-medium">
+                      R$ {(((item.unitPrice || item.price || 0) * item.quantity)).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Seus Dados */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Seus Dados</h2>
@@ -134,7 +189,7 @@ export default function CheckoutPage() {
           {/* Endereço por CEP */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Endereço de Entrega</h2>
-            
+
             {/* Campo CEP */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">CEP</label>
@@ -159,14 +214,6 @@ export default function CheckoutPage() {
               </div>
               {cepError && <p className="text-xs text-red-500 mt-1">{cepError}</p>}
             </div>
-
-            {/* Taxa de Entrega calculada dinamicamente */}
-            {deliveryTax !== null && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm font-medium flex justify-between items-center">
-                <span>Taxa de Entrega da sua Região:</span>
-                <span className="text-base font-bold">R$ {deliveryTax.toFixed(2).replace('.', ',')}</span>
-              </div>
-            )}
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
@@ -233,7 +280,7 @@ export default function CheckoutPage() {
           {/* Formas de Pagamento */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Forma de Pagamento</h2>
-            
+
             {/* PIX */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
@@ -281,7 +328,6 @@ export default function CheckoutPage() {
               <CreditCard size={18} className="text-neutral-400" />
             </label>
 
-            {/* Dados do Cartão se selecionado Débito ou Crédito Online */}
             {(paymentMethod === 'credit_online' || paymentMethod === 'debit_online') && (
               <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg space-y-3 mt-2">
                 <div>
@@ -365,11 +411,35 @@ export default function CheckoutPage() {
             </label>
           </div>
 
+          {/* Resumo Final de Valores no Checkout */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-2 shadow-sm">
+            <div className="flex justify-between text-neutral-600 text-sm">
+              <span>Subtotal (Produtos):</span>
+              <span className="font-semibold">R$ {subtotal.toFixed(2).replace('.', ',')}</span>
+            </div>
+
+            <div className="flex justify-between text-neutral-600 text-sm">
+              <span>Taxa de Entrega:</span>
+              <span className="font-semibold">
+                {deliveryTax !== null
+                  ? `R$ ${deliveryTax.toFixed(2).replace('.', ',')}`
+                  : 'Informe o CEP'}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-lg font-bold text-neutral-900 border-t border-neutral-100 pt-3 mt-2">
+              <span>Valor Total Final:</span>
+              <span className="text-primary text-xl">
+                R$ {finalTotal.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          </div>
+
           <button
             type="submit"
-            className="w-full py-3.5 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-md text-lg"
+            className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors shadow-md text-lg"
           >
-            Confirmar e Enviar Pedido
+            Confirmar e Enviar Pedido (R$ {finalTotal.toFixed(2).replace('.', ',')})
           </button>
         </form>
       </div>

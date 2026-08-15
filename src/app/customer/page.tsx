@@ -42,6 +42,23 @@ export default function CustomerPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Carrega itens salvos previamente se houver
+  useEffect(() => {
+    const saved = localStorage.getItem('garagem_cart_items');
+    if (saved) {
+      try {
+        setCartItems(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  // Salva o carrinho no localStorage sempre que houver mudanças
+  useEffect(() => {
+    localStorage.setItem('garagem_cart_items', JSON.stringify(cartItems));
+  }, [cartItems]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -146,8 +163,6 @@ export default function CustomerPage() {
 
   const totalItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity, 0);
-  const deliveryTax = 5.0;
-  const total = subtotal > 0 ? subtotal + deliveryTax : 0;
 
   return (
     <Layout showNavigation={false}>
@@ -172,12 +187,12 @@ export default function CustomerPage() {
             </button>
           </div>
 
-          {/* Informações de Entrega */}
+          {/* Localização */}
           <div className="bg-secondary/10 border border-secondary/20 rounded-lg p-3 flex items-center gap-3 text-sm">
             <MapPin size={18} className="text-secondary flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-neutral-900 font-semibold">Rua das Flores, 123 - São Paulo</p>
-              <p className="text-neutral-600 text-xs">Taxa de entrega: R$ 5,00 • Tempo: ~30 min</p>
+              <p className="text-neutral-900 font-semibold">Pizzaria & Delivery Garagem.Com</p>
+              <p className="text-neutral-600 text-xs">Entrega rápida na sua região</p>
             </div>
           </div>
 
@@ -257,8 +272,6 @@ export default function CustomerPage() {
       <CartSidebar
         items={cartItems}
         subtotal={subtotal}
-        deliveryTax={deliveryTax}
-        total={total}
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
         onUpdateQuantity={handleUpdateQuantity}
