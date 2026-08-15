@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { getCurrentCashSession, ShiftOrder } from '@/lib/cash-register';
+import { syncIFoodOrders } from '@/lib/ifood';
 
 interface OrderWithDetails extends ShiftOrder {
   status: 'preparo' | 'pronto' | 'saiu' | 'entregue';
