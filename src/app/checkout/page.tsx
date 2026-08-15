@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Search, Loader2, CreditCard, ShoppingBag, Award } from 'lucide-react';
 import Link from 'next/link';
 import { calculateFeeForAddress } from '@/lib/delivery-rates';
+import {
+  getLoyaltySettings,
+  getCustomerLoyaltyByPhone,
+  addOrderPoints,
+  CustomerLoyalty,
+} from '@/lib/loyalty';
 
 interface CartItem {
   id: string;
@@ -15,12 +21,16 @@ interface CartItem {
 }
 
 export default function CheckoutPage() {
-  // Itens do Carrinho
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Dados do Cliente
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+
+  // Fidelidade
+  const [loyaltyProfile, setLoyaltyProfile] = useState<CustomerLoyalty | null>(null);
+  const [redeemDiscount, setRedeemDiscount] = useState(false);
+  const loyaltySettings = getLoyaltySettings();
 
   // Endereço e CEP
   const [cep, setCep] = useState('');
@@ -42,8 +52,8 @@ export default function CheckoutPage() {
   const [cardCvc, setCardCvc] = useState('');
 
   const [orderSubmitted, setOrderSubmitted] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(0);
 
-  // Carrega produtos vindos do carrinho
   useEffect(() => {
     const saved = localStorage.getItem('garagem_cart_items');
     if (saved) {
@@ -55,14 +65,29 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  // Cálculo dos Subtotais
+  // Busca perfil de fidelidade assim que o cliente digita o telefone
+  useEffect(() => {
+    if (phone.length >= 8) {
+      const profile = getCustomerLoyaltyByPhone(phone);
+      setLoyaltyProfile(profile);
+      if (profile && profile.name && !name) {
+        setName(profile.name);
+      }
+    } else {
+      setLoyaltyProfile(null);
+      setRedeemDiscount(false);
+    }
+  }, [phone]);
+
+  // Subtotais
   const subtotal = cartItems.reduce(
     (acc, item) => acc + (item.unitPrice || item.price || 0) * item.quantity,
     0
   );
-  const finalTotal = subtotal + (deliveryTax || 0);
 
-  // Busca do CEP via ViaCEP + cálculo da taxa
+  const discountAmount = redeemDiscount ? loyaltySettings.rewardDiscount : 0;
+  const finalTotal = Math.max(0, subtotal - discountAmount) + (deliveryTax || 0);
+
   const handleSearchCep = async () => {
     const cleanCep = cep.replace(/\D/g, '');
     if (cleanCep.length !== 8) {
@@ -86,7 +111,6 @@ export default function CheckoutPage() {
         setCity(data.localidade || '');
         setState(data.uf || '');
 
-        // Calcula a taxa pela região cadastrada
         const tax = calculateFeeForAddress(data.localidade || '', cleanCep);
         setDeliveryTax(tax);
       }
@@ -100,6 +124,11 @@ export default function CheckoutPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Salva a compra e acumula os pontos de fidelidade do cliente
+    const points = addOrderPoints(name, phone, finalTotal, redeemDiscount);
+    setEarnedPoints(points);
+
     localStorage.removeItem('garagem_cart_items');
     setOrderSubmitted(true);
   };
@@ -109,9 +138,19 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-4 text-center">
         <CheckCircle size={64} className="text-emerald-500 mb-4" />
         <h1 className="text-2xl font-bold text-neutral-900 mb-2">Pedido Recebido com Sucesso!</h1>
-        <p className="text-neutral-600 mb-6 max-w-sm">
+        <p className="text-neutral-600 mb-4 max-w-sm">
           Seu pedido foi enviado para a Garagem.Com. Em breve iniciaremos o preparo.
         </p>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 max-w-sm w-full text-amber-900 text-sm">
+          <div className="flex items-center justify-center gap-2 font-bold text-base mb-1">
+            <Award className="text-amber-600" size={20} /> +{earnedPoints} Pontos Acumulados!
+          </div>
+          <p>
+            Parabéns! Seus dados e pontos foram salvos para a sua próxima compra.
+          </p>
+        </div>
+
         <Link
           href="/customer"
           className="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors"
@@ -151,7 +190,7 @@ export default function CheckoutPage() {
                       {item.quantity}x {item.productName || item.name}
                     </span>
                     <span className="font-medium">
-                      R$ {(((item.unitPrice || item.price || 0) * item.quantity)).toFixed(2).replace('.', ',')}
+                      R$ {((item.unitPrice || item.price || 0) * item.quantity).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
                 ))}
@@ -159,20 +198,9 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Seus Dados */}
+          {/* Seus Dados + Programa de Fidelidade */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Seus Dados</h2>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Nome Completo</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Maycon Antonio"
-                className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">Telefone / WhatsApp</label>
               <input
@@ -184,13 +212,50 @@ export default function CheckoutPage() {
                 className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">Nome Completo</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: Maycon Antonio"
+                className="w-full p-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Banner de Fidelidade do Cliente */}
+            {loyaltyProfile && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2 text-amber-900">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold flex items-center gap-1.5 text-sm">
+                    <Award className="text-amber-600" size={18} /> Você tem {loyaltyProfile.points} pontos de fidelidade!
+                  </span>
+                </div>
+
+                {loyaltyProfile.points >= loyaltySettings.pointsToRedeem ? (
+                  <label className="flex items-center gap-2 font-semibold text-xs cursor-pointer text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200">
+                    <input
+                      type="checkbox"
+                      checked={redeemDiscount}
+                      onChange={(e) => setRedeemDiscount(e.target.checked)}
+                    />
+                    Usar {loyaltySettings.pointsToRedeem} pontos para ganhar R$ {loyaltySettings.rewardDiscount.toFixed(2)} de desconto!
+                  </label>
+                ) : (
+                  <p className="text-xs text-amber-800">
+                    Faltam {loyaltySettings.pointsToRedeem - loyaltyProfile.points} pontos para resgatar R$ {loyaltySettings.rewardDiscount.toFixed(2)} de desconto.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Endereço por CEP */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-4 shadow-sm">
             <h2 className="font-bold text-neutral-900 border-b border-neutral-100 pb-2">Endereço de Entrega</h2>
 
-            {/* Campo CEP */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">CEP</label>
               <div className="flex gap-2">
@@ -382,7 +447,6 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {/* Pagamento na Entrega */}
             <label className="flex items-center gap-3 p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
               <input
                 type="radio"
@@ -411,12 +475,19 @@ export default function CheckoutPage() {
             </label>
           </div>
 
-          {/* Resumo Final de Valores no Checkout */}
+          {/* Resumo Final de Valores */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-2 shadow-sm">
             <div className="flex justify-between text-neutral-600 text-sm">
               <span>Subtotal (Produtos):</span>
               <span className="font-semibold">R$ {subtotal.toFixed(2).replace('.', ',')}</span>
             </div>
+
+            {redeemDiscount && (
+              <div className="flex justify-between text-emerald-600 text-sm font-semibold">
+                <span>Desconto Fidelidade:</span>
+                <span>- R$ {discountAmount.toFixed(2).replace('.', ',')}</span>
+              </div>
+            )}
 
             <div className="flex justify-between text-neutral-600 text-sm">
               <span>Taxa de Entrega:</span>
