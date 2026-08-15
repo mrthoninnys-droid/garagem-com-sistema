@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   DollarSign,
   ShoppingBag,
@@ -27,8 +28,7 @@ import {
   StoreAccount,
 } from '@/lib/auth';
 
-export default function AdminDashboardPage() {
-  const [mounted, setMounted] = useState(false);
+function AdminDashboardContent() {
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
@@ -44,7 +44,6 @@ export default function AdminDashboardPage() {
   const [regError, setRegError] = useState('');
 
   useEffect(() => {
-    setMounted(true);
     setActiveStore(getCurrentActiveStore());
   }, []);
 
@@ -74,15 +73,6 @@ export default function AdminDashboardPage() {
     logoutStoreAccount();
     setActiveStore(null);
   };
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
-        <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
-        <p className="text-sm font-bold text-neutral-800">Carregando painel...</p>
-      </div>
-    );
-  }
 
   // TELA DE AUTENTICAÇÃO (Exibida se não houver loja logada)
   if (!activeStore) {
@@ -227,7 +217,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // PAINEL DE GESTÃO (Exibido após login)
+  // PAINEL DE GESTÃO (Exibido após o login)
   const adminModules = [
     {
       title: 'Controle de Caixa',
@@ -348,3 +338,14 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+// Desativa o SSR para eliminar completamente os erros de hidratação do React
+export default dynamic(() => Promise.resolve(AdminDashboardContent), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
+      <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
+      <p className="text-sm font-bold text-neutral-800">Carregando painel...</p>
+    </div>
+  ),
+});
