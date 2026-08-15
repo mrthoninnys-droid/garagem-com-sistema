@@ -29,7 +29,6 @@ export default function AdminOrdersPage() {
 
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
 
-  // Carrega configurações de Auto-Impressão e Pedidos
   useEffect(() => {
     const savedAutoPrint = localStorage.getItem('garagem_auto_print');
     if (savedAutoPrint !== null) {
@@ -38,7 +37,6 @@ export default function AdminOrdersPage() {
 
     loadOrders();
 
-    // Sincroniza com iFood e atualiza lista a cada 15 segundos
     const interval = setInterval(async () => {
       await syncIFoodOrders();
       loadOrders();
@@ -66,19 +64,16 @@ export default function AdminOrdersPage() {
       motoboy: detailsMap[o.id]?.motoboy || '',
     }));
 
-    // Verifica se chegaram novos pedidos
     const newOrders = merged.filter((o) => !knownOrderIdsRef.current.has(o.id));
 
     if (newOrders.length > 0 && knownOrderIdsRef.current.size > 0) {
       const latestOrder = newOrders[0];
-      // Se a impressão automática estiver ativa, dispara a impressão do novo pedido
       const isAuto = localStorage.getItem('garagem_auto_print');
       if (isAuto && JSON.parse(isAuto)) {
         triggerPrint(latestOrder);
       }
     }
 
-    // Atualiza lista de IDs conhecidos
     merged.forEach((o) => knownOrderIdsRef.current.add(o.id));
     setOrders(merged);
   };
@@ -123,7 +118,6 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">
-      {/* Estilo Especial para Impressoras Térmicas (Apenas o Comprovante é impresso) */}
       <style jsx global>{`
         @media print {
           body * {
@@ -146,7 +140,6 @@ export default function AdminOrdersPage() {
         }
       `}</style>
 
-      {/* Header Principal */}
       <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 print:hidden">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-4">
@@ -156,7 +149,6 @@ export default function AdminOrdersPage() {
             <h1 className="text-xl font-bold text-neutral-900">Gestão de Pedidos & Motoboys</h1>
           </div>
 
-          {/* Botão para Ativar/Desativar Impressão Automática */}
           <button
             onClick={toggleAutoPrint}
             className={`px-4 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border transition-colors ${
@@ -196,7 +188,6 @@ export default function AdminOrdersPage() {
                     <span className="text-xs text-neutral-400 block uppercase font-medium">{ord.paymentMethod}</span>
                   </div>
 
-                  {/* Botão Imprimir Manual */}
                   <button
                     onClick={() => triggerPrint(ord)}
                     className="p-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg flex items-center gap-1.5 text-xs font-bold border border-neutral-300"
@@ -208,7 +199,6 @@ export default function AdminOrdersPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                {/* Atribuição de Motoboy */}
                 <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg space-y-2">
                   <label className="block text-xs font-bold text-neutral-700 flex items-center gap-1.5">
                     <Truck size={16} /> Entregador / Motoboy Responsável:
@@ -246,7 +236,6 @@ export default function AdminOrdersPage() {
                   )}
                 </div>
 
-                {/* Seletor de Status */}
                 <div className="flex items-center gap-2 justify-start md:justify-end">
                   <button
                     onClick={() => handleUpdateStatus(ord.id, 'preparo')}
@@ -281,7 +270,6 @@ export default function AdminOrdersPage() {
         )}
       </div>
 
-      {/* MODELO DO CUPOM TÉRMICO (Formatado para Impressoras Térmicas) */}
       {selectedOrderToPrint && (
         <div id="thermal-receipt" className="hidden print:block">
           <div style={{ textAlign: 'center', marginBottom: '10px' }}>
@@ -310,7 +298,6 @@ export default function AdminOrdersPage() {
 
           <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '10px' }}>
             <p style={{ margin: 0 }}>Obrigado pela preferência!</p>
-            <p style={{ margin: 0 }}>www.garagem-com-oficial.vercel.app</p>
           </div>
         </div>
       )}
