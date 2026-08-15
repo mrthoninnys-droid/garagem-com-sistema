@@ -88,7 +88,7 @@ export function getCurrentActiveStore(): StoreAccount | null {
     const saved = localStorage.getItem(STORAGE_CURRENT_SESSION);
     if (!saved) return null;
     const parsed = JSON.parse(saved);
-    if (parsed && parsed.email && parsed.storeName) {
+    if (parsed && typeof parsed === 'object' && parsed.email && parsed.storeName) {
       return parsed;
     }
     return null;

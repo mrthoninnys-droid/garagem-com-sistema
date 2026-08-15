@@ -7,14 +7,48 @@ import { Motoboy, getMotoboys, saveMotoboys } from '@/lib/motoboys';
 import { getCurrentCashSession } from '@/lib/cash-register';
 
 export default function AdminMotoboysPage() {
+  const [mounted, setMounted] = useState(false);
   const [motoboys, setMotoboysList] = useState<Motoboy[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [vehicle, setVehicle] = useState('Moto');
   const [deliveryFeeRate, setDeliveryFeeRate] = useState('5.00');
+  const [deliveryReport, setDeliveryReport] = useState<{ motoboy: Motoboy; totalDeliveries: number; totalPayable: number }[]>([]);
 
   useEffect(() => {
-    setMotoboysList(getMotoboys());
+    setMounted(true);
+    const loadedMotoboys = getMotoboys();
+    setMotoboysList(loadedMotoboys);
+
+    const session = getCurrentCashSession();
+    let detailsMap: Record<string, { motoboy?: string }> = {};
+
+    if (typeof window !== 'undefined') {
+      const savedDetails = localStorage.getItem('garagem_orders_details');
+      if (savedDetails) {
+        try {
+          detailsMap = JSON.parse(savedDetails);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    const report = loadedMotoboys.map((mb) => {
+      const assignedOrders = (session?.orders || []).filter(
+        (o) => detailsMap[o.id]?.motoboy?.toLowerCase() === mb.name.toLowerCase()
+      );
+      const totalDeliveries = assignedOrders.length;
+      const totalPayable = totalDeliveries * mb.deliveryFeeRate;
+
+      return {
+        motoboy: mb,
+        totalDeliveries,
+        totalPayable,
+      };
+    });
+
+    setDeliveryReport(report);
   }, []);
 
   const handleAddMotoboy = (e: React.FormEvent) => {
@@ -43,32 +77,13 @@ export default function AdminMotoboysPage() {
     saveMotoboys(updated);
   };
 
-  // Cálculo do Relatório de Entregas do Caixa Aberto
-  const session = getCurrentCashSession();
-  const savedDetails = localStorage.getItem('garagem_orders_details');
-  let detailsMap: Record<string, { motoboy?: string }> = {};
-
-  if (savedDetails) {
-    try {
-      detailsMap = JSON.parse(savedDetails);
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  const deliveryReport = motoboys.map((mb) => {
-    const assignedOrders = session.orders.filter(
-      (o) => detailsMap[o.id]?.motoboy?.toLowerCase() === mb.name.toLowerCase()
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
+        <p className="text-sm font-bold text-neutral-600">Carregando módulo de motoboys...</p>
+      </div>
     );
-    const totalDeliveries = assignedOrders.length;
-    const totalPayable = totalDeliveries * mb.deliveryFeeRate;
-
-    return {
-      motoboy: mb,
-      totalDeliveries,
-      totalPayable,
-    };
-  });
+  }
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-12">

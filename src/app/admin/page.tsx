@@ -28,24 +28,25 @@ import {
 } from '@/lib/auth';
 
 export default function AdminDashboardPage() {
-  const [mounted, setMounted] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
-  // Formulário de Login
+  // Login Form State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Formulário de Cadastro
+  // Register Form State
   const [regStoreName, setRegStoreName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regError, setRegError] = useState('');
 
   useEffect(() => {
-    setMounted(true);
-    setActiveStore(getCurrentActiveStore());
+    const store = getCurrentActiveStore();
+    setActiveStore(store);
+    setIsLoaded(true);
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -75,8 +76,8 @@ export default function AdminDashboardPage() {
     setActiveStore(null);
   };
 
-  // 1. ANTES DA MONTAGEM: Garante 100% de igualdade entre o HTML do servidor e o primeiro render do cliente
-  if (!mounted) {
+  // 1. Renderização Inicial Limpa (Sincronizada entre servidor e cliente)
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
         <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
@@ -85,7 +86,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // 2. TELA DE AUTENTICAÇÃO: Exibida se não houver loja logada
+  // 2. Tela de Autenticação (Exibida se não houver loja logada)
   if (!activeStore) {
     return (
       <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4">
@@ -228,7 +229,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // 3. PAINEL DE GESTÃO: Exibido após login efetuado
+  // 3. Painel de Gestão (Exibido após login)
   const adminModules = [
     {
       title: 'Controle de Caixa',
