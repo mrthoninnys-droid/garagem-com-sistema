@@ -19,10 +19,10 @@ export interface ShiftOrder {
 export interface PaymentBreakdown {
   method: string;
   label: string;
-  grossAmount: number; // Valor Bruto
-  feeRate: number;      // Porcentagem de Taxa
-  feeAmount: number;    // Valor da Taxa Descontada
-  netAmount: number;    // Valor Líquido
+  grossAmount: number;
+  feeRate: number;
+  feeAmount: number;
+  netAmount: number;
   orderCount: number;
 }
 
@@ -31,10 +31,12 @@ export interface ClosureReport {
   openedAt: string;
   closedAt: string;
   initialCash: number;
+  operatorName?: string;
+  operatorUsername?: string;
   grossTotal: number;
   totalFees: number;
   netTotal: number;
-  totalCashInHand: number; // Troco Inicial + Dinheiro das vendas
+  totalCashInHand: number;
   breakdown: PaymentBreakdown[];
 }
 
@@ -44,6 +46,8 @@ export interface CashSession {
   openedAt: string;
   closedAt?: string;
   initialCash: number;
+  operatorName?: string;
+  operatorUsername?: string;
   orders: ShiftOrder[];
   closureReport?: ClosureReport;
 }
@@ -67,12 +71,18 @@ export function getCurrentCashSession(): CashSession {
   }
 }
 
-export function openCashRegister(initialCash: number): CashSession {
+export function openCashRegister(
+  initialCash: number,
+  operatorName: string = 'Gestor / Sistema',
+  operatorUsername: string = '@gestor'
+): CashSession {
   const newSession: CashSession = {
     id: Date.now().toString(),
     isOpen: true,
     openedAt: new Date().toLocaleString('pt-BR'),
     initialCash,
+    operatorName,
+    operatorUsername,
     orders: [],
   };
 
@@ -86,7 +96,6 @@ export function openCashRegister(initialCash: number): CashSession {
 export function registerOrderInCash(orderData: Omit<ShiftOrder, 'id' | 'orderNumber' | 'createdAt'>): CashSession {
   const session = getCurrentCashSession();
   if (!session.isOpen) {
-    // Se o caixa não estava aberto, abre automaticamente
     openCashRegister(100);
     return registerOrderInCash(orderData);
   }
@@ -110,7 +119,6 @@ export function registerOrderInCash(orderData: Omit<ShiftOrder, 'id' | 'orderNum
   return updatedSession;
 }
 
-// Lógica de Operação Completa de Fechamento de Caixa
 export function closeCashRegisterWithOperation(): { session: CashSession; report: ClosureReport } {
   const session = getCurrentCashSession();
   const settings = getStoreSettings();
@@ -160,6 +168,8 @@ export function closeCashRegisterWithOperation(): { session: CashSession; report
     openedAt: session.openedAt,
     closedAt: new Date().toLocaleString('pt-BR'),
     initialCash: session.initialCash,
+    operatorName: session.operatorName,
+    operatorUsername: session.operatorUsername,
     grossTotal,
     totalFees,
     netTotal,
@@ -176,7 +186,6 @@ export function closeCashRegisterWithOperation(): { session: CashSession; report
 
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(closedSession));
-    // Salva o histórico de caixas fechados
     const historySaved = localStorage.getItem('garagem_cash_history');
     const history = historySaved ? JSON.parse(historySaved) : [];
     history.unshift(report);
