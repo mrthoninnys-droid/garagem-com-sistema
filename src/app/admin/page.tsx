@@ -22,26 +22,29 @@ import { getCurrentActiveStore, logoutStoreAccount, StoreAccount } from '@/lib/a
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [activeStore, setActiveStore] = useState<StoreAccount | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setMounted(true);
     const store = getCurrentActiveStore();
-    if (store) {
+    if (!store) {
+      router.replace('/admin/login');
+    } else {
       setActiveStore(store);
+      setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   const handleLogout = () => {
     logoutStoreAccount();
-    router.push('/admin/login');
+    router.replace('/admin/login');
   };
 
-  if (!mounted || !activeStore) {
+  if (loading || !activeStore) {
     return (
-      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-neutral-100 flex flex-col items-center justify-center p-4 text-center">
         <Loader2 size={36} className="animate-spin text-neutral-900 mb-3" />
-        <p className="text-sm font-bold text-neutral-800">Carregando painel administrativo...</p>
+        <p className="text-sm font-bold text-neutral-800">Verificando autorização do acesso...</p>
+        <p className="text-xs text-neutral-500 mt-1">Redirecionando para o login...</p>
       </div>
     );
   }
