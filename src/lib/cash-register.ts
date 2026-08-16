@@ -1,5 +1,22 @@
 import { getStoreSettings, CardRates } from './settings';
 
+export interface OrderAddress {
+  street: string;
+  number: string;
+  neighborhood: string;
+  complement?: string;
+  reference?: string;
+  cep?: string;
+}
+
+export interface OrderItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  observation?: string;
+}
+
 export interface ShiftOrder {
   id: string;
   orderNumber: number;
@@ -7,7 +24,11 @@ export interface ShiftOrder {
   phone: string;
   orderType: 'mesa' | 'retirada' | 'entrega';
   tableNumber?: string;
+  address?: OrderAddress;
+  needChange?: boolean;
+  changeFor?: number;
   itemsSummary: string;
+  itemsList?: OrderItem[];
   total: number;
   paymentMethod:
     | 'dinheiro'
@@ -102,17 +123,26 @@ export function openCashRegister(
   return newSession;
 }
 
-// Grava o pedido na sessão do caixa atual e no histórico global de faturamento
+// Grava o pedido garantindo sequencialidade unificada de ordens (#1, #2, #3)
 export function registerOrderInCash(
   orderData: Omit<ShiftOrder, 'id' | 'orderNumber' | 'createdAt' | 'timestamp'>
 ): ShiftOrder {
   const session = getCurrentCashSession();
+  const globalHistory = getGlobalOrderHistory();
   const currentTimestamp = Date.now();
+
+  const maxOrderNumber = Math.max(
+    ...session.orders.map((o) => o.orderNumber || 0),
+    ...globalHistory.map((h) => h.orderNumber || 0),
+    0
+  );
+
+  const nextNumber = maxOrderNumber + 1;
 
   const newOrder: ShiftOrder = {
     ...orderData,
     id: currentTimestamp.toString(),
-    orderNumber: session.orders.length + 1,
+    orderNumber: nextNumber,
     createdAt: new Date().toLocaleString('pt-BR'),
     timestamp: currentTimestamp,
   };
@@ -171,31 +201,46 @@ export function getGlobalOrderHistory(): ShiftOrder[] {
   }
 }
 
-// Relatório de Faturamento por Período
-export function calculateRevenueByPeriod() {
+// Relatório por Período Personalizado com Filtro de Data Inicial e Final
+export function calculateRevenueByCustomRange(startDateStr: string, endDateStr: string) {
   const history = getGlobalOrderHistory().filter((o) => o.status === 'finalizado' && o.isPaid);
-  const now = new Date();
 
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  let startTs = 0;
+  let endTs = Date.now();
 
-  const dayOfWeek = now.getDay();
-  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
+  if (startDateStr) {
+    startTs = new Date(`${startDateStr}T00:00:00`).getTime();
+  }
 
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  if (endDateStr) {
+    endTs = new Date(`${endDateStr}T23:59:59`).getTime();
+  }
 
-  const currentMonth = now.getMonth();
-  const semiMonthStart = currentMonth < 6 ? 0 : 6;
-  const startOfSemiAnnual = new Date(now.getFullYear(), semiMonthStart, 1).getTime();
+  const filteredOrders = history.filter((o) => o.timestamp >= startTs && o.timestamp <= endTs);
+  const grossTotal = filteredOrders.reduce((sum, o) => sum + o.total, 0);
 
-  const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+  const settings = getStoreSettings();
+  const rates = settings.cardRates;
 
-  const daily = history.filter((o) => o.timestamp >= startOfDay).reduce((acc, o) => acc + o.total, 0);
-  const weekly = history.filter((o) => o.timestamp >= startOfWeek).reduce((acc, o) => acc + o.total, 0);
-  const monthly = history.filter((o) => o.timestamp >= startOfMonth).reduce((acc, o) => acc + o.total, 0);
-  const semiAnnual = history.filter((o) => o.timestamp >= startOfSemiAnnual).reduce((acc, o) => acc + o.total, 0);
-  const annual = history.filter((o) => o.timestamp >= startOfYear).reduce((acc, o) => acc + o.total, 0);
+  let totalFees = 0;
+  filteredOrders.forEach((o) => {
+    let feeRate = 0;
+    if (o.paymentMethod === 'credito_online') feeRate = rates.creditOnlineFee || 0;
+    if (o.paymentMethod === 'debito_online') feeRate = rates.debitOnlineFee || 0;
+    if (o.paymentMethod === 'credito_presencial') feeRate = rates.creditInPersonFee || 0;
+    if (o.paymentMethod === 'debito_presencial') feeRate = rates.debitInPersonFee || 0;
+    if (o.paymentMethod === 'pix') feeRate = rates.pixFee || 0;
 
-  return { daily, weekly, monthly, semiAnnual, annual };
+    totalFees += (o.total * feeRate) / 100;
+  });
+
+  return {
+    grossTotal,
+    totalFees,
+    netTotal: grossTotal - totalFees,
+    totalOrders: filteredOrders.length,
+    orders: filteredOrders,
+  };
 }
 
 export function closeCashRegisterWithOperation(): { session: CashSession; report: ClosureReport } {
