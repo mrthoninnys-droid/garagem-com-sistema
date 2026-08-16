@@ -5,6 +5,9 @@ export interface ShiftOrder {
   orderNumber: number;
   customerName: string;
   phone: string;
+  orderType: 'mesa' | 'retirada' | 'entrega';
+  tableNumber?: string;
+  itemsSummary: string;
   total: number;
   paymentMethod:
     | 'dinheiro'
@@ -13,7 +16,12 @@ export interface ShiftOrder {
     | 'debito_online'
     | 'credito_presencial'
     | 'debito_presencial';
+  isPaid: boolean;
+  status: 'preparo' | 'despachado' | 'finalizado' | 'cancelado';
+  source: 'manual' | 'ifood' | 'site';
+  motoboy?: string;
   createdAt: string;
+  timestamp: number;
 }
 
 export interface PaymentBreakdown {
@@ -53,6 +61,7 @@ export interface CashSession {
 }
 
 const STORAGE_KEY = 'garagem_cash_session';
+const STORAGE_HISTORY = 'garagem_all_orders_history';
 
 export function getCurrentCashSession(): CashSession {
   if (typeof window === 'undefined') {
@@ -93,30 +102,100 @@ export function openCashRegister(
   return newSession;
 }
 
-export function registerOrderInCash(orderData: Omit<ShiftOrder, 'id' | 'orderNumber' | 'createdAt'>): CashSession {
+// Grava o pedido na sessão do caixa atual e no histórico global de faturamento
+export function registerOrderInCash(
+  orderData: Omit<ShiftOrder, 'id' | 'orderNumber' | 'createdAt' | 'timestamp'>
+): ShiftOrder {
   const session = getCurrentCashSession();
-  if (!session.isOpen) {
-    openCashRegister(100);
-    return registerOrderInCash(orderData);
-  }
+  const currentTimestamp = Date.now();
 
   const newOrder: ShiftOrder = {
     ...orderData,
-    id: Date.now().toString(),
+    id: currentTimestamp.toString(),
     orderNumber: session.orders.length + 1,
-    createdAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    createdAt: new Date().toLocaleString('pt-BR'),
+    timestamp: currentTimestamp,
   };
 
   const updatedSession: CashSession = {
     ...session,
-    orders: [newOrder, ...session.orders],
+    orders: [newOrder, ...session.orders.filter((o) => o.id !== newOrder.id)],
   };
 
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSession));
+    saveToGlobalOrderHistory(newOrder);
   }
 
-  return updatedSession;
+  return newOrder;
+}
+
+export function updateOrderInCash(updatedOrder: ShiftOrder) {
+  const session = getCurrentCashSession();
+  const updatedOrders = session.orders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+
+  const updatedSession: CashSession = {
+    ...session,
+    orders: updatedOrders,
+  };
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSession));
+    saveToGlobalOrderHistory(updatedOrder);
+  }
+}
+
+function saveToGlobalOrderHistory(order: ShiftOrder) {
+  if (typeof window === 'undefined') return;
+  const saved = localStorage.getItem(STORAGE_HISTORY);
+  let history: ShiftOrder[] = saved ? JSON.parse(saved) : [];
+
+  const index = history.findIndex((h) => h.id === order.id);
+  if (index >= 0) {
+    history[index] = order;
+  } else {
+    history.unshift(order);
+  }
+
+  localStorage.setItem(STORAGE_HISTORY, JSON.stringify(history));
+}
+
+export function getGlobalOrderHistory(): ShiftOrder[] {
+  if (typeof window === 'undefined') return [];
+  const saved = localStorage.getItem(STORAGE_HISTORY);
+  if (!saved) return [];
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return [];
+  }
+}
+
+// Relatório de Faturamento por Período
+export function calculateRevenueByPeriod() {
+  const history = getGlobalOrderHistory().filter((o) => o.status === 'finalizado' && o.isPaid);
+  const now = new Date();
+
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const dayOfWeek = now.getDay();
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  const currentMonth = now.getMonth();
+  const semiMonthStart = currentMonth < 6 ? 0 : 6;
+  const startOfSemiAnnual = new Date(now.getFullYear(), semiMonthStart, 1).getTime();
+
+  const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+
+  const daily = history.filter((o) => o.timestamp >= startOfDay).reduce((acc, o) => acc + o.total, 0);
+  const weekly = history.filter((o) => o.timestamp >= startOfWeek).reduce((acc, o) => acc + o.total, 0);
+  const monthly = history.filter((o) => o.timestamp >= startOfMonth).reduce((acc, o) => acc + o.total, 0);
+  const semiAnnual = history.filter((o) => o.timestamp >= startOfSemiAnnual).reduce((acc, o) => acc + o.total, 0);
+  const annual = history.filter((o) => o.timestamp >= startOfYear).reduce((acc, o) => acc + o.total, 0);
+
+  return { daily, weekly, monthly, semiAnnual, annual };
 }
 
 export function closeCashRegisterWithOperation(): { session: CashSession; report: ClosureReport } {
@@ -138,8 +217,10 @@ export function closeCashRegisterWithOperation(): { session: CashSession; report
   let netTotal = 0;
   let cashSalesTotal = 0;
 
+  const paidOrders = session.orders.filter((o) => o.isPaid && o.status !== 'cancelado');
+
   const breakdown: PaymentBreakdown[] = paymentTypes.map((pt) => {
-    const matchingOrders = session.orders.filter((o) => o.paymentMethod === pt.key);
+    const matchingOrders = paidOrders.filter((o) => o.paymentMethod === pt.key);
     const grossAmount = matchingOrders.reduce((sum, o) => sum + o.total, 0);
     const feeAmount = (grossAmount * pt.fee) / 100;
     const netAmount = grossAmount - feeAmount;

@@ -1,4 +1,4 @@
-import { registerOrderInCash } from '@/lib/cash-register';
+import { registerOrderInCash, updateOrderInCash, getCurrentCashSession } from '@/lib/cash-register';
 
 const IFOOD_CLIENT_ID = process.env.NEXT_PUBLIC_IFOOD_CLIENT_ID || '';
 const IFOOD_CLIENT_SECRET = process.env.NEXT_PUBLIC_IFOOD_CLIENT_SECRET || '';
@@ -54,6 +54,7 @@ export async function syncIFoodOrders() {
     let importedCount = 0;
 
     for (const event of events) {
+      // 1. Novo Pedido Criado no iFood
       if (event.code === 'PLC') {
         const orderRes = await fetch(`${IFOOD_BASE_URL}/order/v1.0/orders/${event.orderId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -61,15 +62,38 @@ export async function syncIFoodOrders() {
 
         if (orderRes.ok) {
           const ifoodOrder = await orderRes.json();
+          const isPrepaid = ifoodOrder.payments?.prepaid === true;
 
           registerOrderInCash({
             customerName: `[iFood] ${ifoodOrder.customer?.name || 'Cliente'}`,
             phone: ifoodOrder.customer?.phone?.number || '',
+            orderType: 'entrega',
+            itemsSummary: (ifoodOrder.items || []).map((i: any) => `${i.quantity}x ${i.name}`).join(', ') || 'Itens iFood',
             total: (ifoodOrder.total?.subTotal || 0) + (ifoodOrder.total?.deliveryFee || 0),
-            paymentMethod: 'pix',
+            paymentMethod: isPrepaid ? 'credito_online' : 'credito_presencial',
+            isPaid: isPrepaid,
+            status: 'preparo',
+            source: 'ifood',
           });
 
           importedCount++;
+        }
+      }
+
+      // 2. Confirmação de Entrega pelo iFood (Auto-Finaliza se for pré-pago)
+      if (event.code === 'CON' || event.code === 'DEL') {
+        const session = getCurrentCashSession();
+        const matchingOrder = session.orders.find(
+          (o) => o.source === 'ifood' && o.customerName.includes(event.orderId)
+        );
+
+        if (matchingOrder) {
+          if (matchingOrder.isPaid) {
+            updateOrderInCash({
+              ...matchingOrder,
+              status: 'finalizado',
+            });
+          }
         }
       }
 
