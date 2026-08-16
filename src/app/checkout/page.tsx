@@ -12,27 +12,37 @@ import {
   DollarSign,
   CheckCircle2,
   AlertCircle,
+  MapPin,
+  Search,
+  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { registerOrderInCash } from '@/lib/cash-register';
+import { getDeliveryRates } from '@/lib/delivery-rates';
 
 export default function AppCheckoutPage() {
   const router = useRouter();
   const [orderType, setOrderType] = useState<'entrega' | 'retirada'>('entrega');
-  
+
   // Dados do Cliente
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
 
-  // Endereço (se entrega)
+  // Endereço e CEP
+  const [cep, setCep] = useState('');
   const [street, setStreet] = useState('');
   const [number, setNumber] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [complement, setComplement] = useState('');
   const [reference, setReference] = useState('');
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [deliveryFee, setDeliveryFee] = useState(7.0);
 
   // Formas de Pagamento
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credito_online' | 'debito_online' | 'dinheiro'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<
+    'pix' | 'credito_online' | 'debito_online' | 'credito_presencial' | 'debito_presencial' | 'dinheiro'
+  >('pix');
+
   const [needChangeOption, setNeedChangeOption] = useState<'sim' | 'nao' | null>(null);
   const [changeForInput, setChangeForInput] = useState('');
 
@@ -52,8 +62,52 @@ export default function AppCheckoutPage() {
     }
   }, []);
 
+  // Busca automática do CEP via API do ViaCEP
+  const handleCepLookup = async (cepInput: string) => {
+    const cleanCep = cepInput.replace(/\D/g, '');
+    setCep(cleanCep);
+
+    if (cleanCep.length === 8) {
+      setIsLoadingCep(true);
+      setErrorMsg('');
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await res.json();
+
+        if (data.erro) {
+          setErrorMsg('CEP não encontrado. Digite o endereço manualmente.');
+        } else {
+          setStreet(data.logradouro || '');
+          setNeighborhood(data.bairro || '');
+
+          const rates = getDeliveryRates();
+          const match: any = rates.find(
+            (r: any) =>
+              (r.neighborhood || r.name || r.bairro || '').toLowerCase().trim() ===
+              (data.bairro || '').toLowerCase().trim()
+          );
+
+          if (match) {
+            setDeliveryFee(match.fee ?? match.price ?? match.rate ?? 7.0);
+          } else {
+            setDeliveryFee(7.0);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar CEP:', err);
+      } finally {
+        setIsLoadingCep(false);
+      }
+    }
+  };
+
+  const calculateSubtotal = () => {
+    return cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  };
+
   const calculateTotal = () => {
-    return cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const subtotal = calculateSubtotal();
+    return orderType === 'entrega' ? subtotal + deliveryFee : subtotal;
   };
 
   const handleSubmitOrder = (e: React.FormEvent) => {
@@ -71,25 +125,26 @@ export default function AppCheckoutPage() {
     }
 
     if (orderType === 'entrega' && (!street.trim() || !number.trim() || !neighborhood.trim())) {
-      setErrorMsg('Preencha o endereço completo para entrega.');
+      setErrorMsg('Preencha o endereço completo para a entrega.');
       return;
     }
 
-    // Validação de Troco no Dinheiro
     if (paymentMethod === 'dinheiro') {
       if (needChangeOption === null) {
         setErrorMsg('Por favor, informe se precisa de troco para o pagamento em dinheiro.');
         return;
       }
       if (needChangeOption === 'sim' && (!changeForInput || parseFloat(changeForInput) <= calculateTotal())) {
-        setErrorMsg(`Informe um valor para troco maior que R$ ${calculateTotal().toFixed(2)}.`);
+        setErrorMsg(`Informe um valor para troco maior do que o total de R$ ${calculateTotal().toFixed(2)}.`);
         return;
       }
     }
 
     setIsSubmitting(true);
 
-    const isOnlinePayment = paymentMethod === 'pix' || paymentMethod === 'credito_online' || paymentMethod === 'debito_online';
+    const isOnlinePayment =
+      paymentMethod === 'pix' || paymentMethod === 'credito_online' || paymentMethod === 'debito_online';
+
     const totalAmount = calculateTotal();
     const itemsSummary = cartItems.map((i) => `${i.quantity}x ${i.title || i.name}`).join(', ');
 
@@ -97,20 +152,24 @@ export default function AppCheckoutPage() {
       customerName: customerName.trim(),
       phone: phone.trim(),
       orderType: orderType,
-      address: orderType === 'entrega' ? {
-        street,
-        number,
-        neighborhood,
-        complement,
-        reference,
-      } : undefined,
+      address:
+        orderType === 'entrega'
+          ? {
+              street,
+              number,
+              neighborhood,
+              complement,
+              reference,
+              cep,
+            }
+          : undefined,
       itemsSummary,
       itemsList: cartItems,
       total: totalAmount,
       paymentMethod,
       needChange: paymentMethod === 'dinheiro' && needChangeOption === 'sim',
       changeFor: paymentMethod === 'dinheiro' && needChangeOption === 'sim' ? parseFloat(changeForInput) : undefined,
-      isPaid: isOnlinePayment, // Pagamentos online só concluem marcados como pagos
+      isPaid: isOnlinePayment,
       status: 'preparo',
       source: 'site',
     });
@@ -121,7 +180,6 @@ export default function AppCheckoutPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-16">
-      {/* Header com Ícone de Lanchonete/Hambúrguer */}
       <div className="bg-white border-b border-neutral-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <Link href="/menu" className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-600">
@@ -135,7 +193,6 @@ export default function AppCheckoutPage() {
       </div>
 
       <div className="max-w-md mx-auto px-4 mt-6 space-y-5">
-        {/* Toggle Entrega vs Retirada */}
         <div className="bg-white p-1.5 rounded-xl border border-neutral-200 grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -163,7 +220,6 @@ export default function AppCheckoutPage() {
         </div>
 
         <form onSubmit={handleSubmitOrder} className="space-y-4 text-xs">
-          {/* Dados Pessoais */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3">
             <h2 className="font-bold text-neutral-900 text-sm">Seus Dados</h2>
             <div>
@@ -190,10 +246,29 @@ export default function AppCheckoutPage() {
             </div>
           </div>
 
-          {/* Endereço de Entrega */}
           {orderType === 'entrega' && (
             <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3">
-              <h2 className="font-bold text-neutral-900 text-sm">Endereço de Entrega</h2>
+              <h2 className="font-bold text-neutral-900 text-sm flex items-center gap-1.5">
+                <MapPin size={16} className="text-purple-600" /> Endereço de Entrega
+              </h2>
+
+              <div>
+                <label className="block font-semibold text-neutral-700 mb-1">CEP (Busca Automática)</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={9}
+                    placeholder="00000-000"
+                    value={cep}
+                    onChange={(e) => handleCepLookup(e.target.value)}
+                    className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white font-bold"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                    {isLoadingCep ? <Loader2 size={18} className="animate-spin text-purple-600" /> : <Search size={18} />}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
                   <label className="block font-semibold text-neutral-700 mb-1">Rua / Logradouro</label>
@@ -256,7 +331,6 @@ export default function AppCheckoutPage() {
             </div>
           )}
 
-          {/* Formas de Pagamento */}
           <div className="bg-white p-4 rounded-xl border border-neutral-200 space-y-3">
             <h2 className="font-bold text-neutral-900 text-sm">Forma de Pagamento</h2>
 
@@ -294,17 +368,58 @@ export default function AppCheckoutPage() {
                   <input
                     type="radio"
                     name="payment"
+                    value="debito_online"
+                    checked={paymentMethod === 'debito_online'}
+                    onChange={() => setPaymentMethod('debito_online')}
+                    className="text-blue-600"
+                  />
+                  <CreditCard size={18} className="text-blue-600" /> Cartão de Débito Online
+                </div>
+              </label>
+
+              <label className="flex items-center justify-between p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
+                <div className="flex items-center gap-2 font-bold text-neutral-800">
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="credito_presencial"
+                    checked={paymentMethod === 'credito_presencial'}
+                    onChange={() => setPaymentMethod('credito_presencial')}
+                    className="text-purple-600"
+                  />
+                  <CreditCard size={18} className="text-purple-600" /> Cartão de Crédito na Entrega (Maquininha)
+                </div>
+              </label>
+
+              <label className="flex items-center justify-between p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
+                <div className="flex items-center gap-2 font-bold text-neutral-800">
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="debito_presencial"
+                    checked={paymentMethod === 'debito_presencial'}
+                    onChange={() => setPaymentMethod('debito_presencial')}
+                    className="text-cyan-600"
+                  />
+                  <CreditCard size={18} className="text-cyan-600" /> Cartão de Débito na Entrega (Maquininha)
+                </div>
+              </label>
+
+              <label className="flex items-center justify-between p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50">
+                <div className="flex items-center gap-2 font-bold text-neutral-800">
+                  <input
+                    type="radio"
+                    name="payment"
                     value="dinheiro"
                     checked={paymentMethod === 'dinheiro'}
                     onChange={() => setPaymentMethod('dinheiro')}
                     className="text-amber-600"
                   />
-                  <DollarSign size={18} className="text-amber-600" /> Dinheiro na Entrega/Retirada
+                  <DollarSign size={18} className="text-amber-600" /> Dinheiro em Espécie
                 </div>
               </label>
             </div>
 
-            {/* Pergunta Obrigatória de Troco (Se Dinheiro) */}
             {paymentMethod === 'dinheiro' && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3 mt-3">
                 <span className="font-bold text-amber-900 block">Precisa de troco? *</span>
@@ -360,16 +475,28 @@ export default function AppCheckoutPage() {
             </div>
           )}
 
-          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-3">
-            <div className="flex justify-between font-bold text-sm text-neutral-900">
-              <span>Total a Pagar:</span>
+          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-2">
+            <div className="flex justify-between text-neutral-600">
+              <span>Subtotal dos Produtos:</span>
+              <span>R$ {calculateSubtotal().toFixed(2)}</span>
+            </div>
+
+            {orderType === 'entrega' && (
+              <div className="flex justify-between text-neutral-600">
+                <span>Taxa de Entrega:</span>
+                <span className="font-semibold text-purple-700">R$ {deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between font-bold text-sm text-neutral-900 pt-2 border-t border-neutral-100">
+              <span>Total Final:</span>
               <span className="text-emerald-600 text-base">R$ {calculateTotal().toFixed(2)}</span>
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2 mt-2"
             >
               <CheckCircle2 size={18} /> Confirmar & Enviar Pedido
             </button>

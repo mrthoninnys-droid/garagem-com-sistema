@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Utensils,
   ShoppingBag,
@@ -103,7 +102,6 @@ const CATEGORIES = [
 ];
 
 export default function CustomerMenuPage() {
-  const router = useRouter();
   const [products, setProducts] = useState<MenuItem[]>([]);
   const [activeCategory, setActiveCategory] = useState('todos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,7 +112,6 @@ export default function CustomerMenuPage() {
   useEffect(() => {
     setStoreOpen(isStoreOpen());
 
-    // Carrega produtos salvos no Admin ou usa o padrão
     const savedMenu = localStorage.getItem('garagem_menu_items');
     if (savedMenu) {
       try {
@@ -131,7 +128,6 @@ export default function CustomerMenuPage() {
       setProducts(DEFAULT_PRODUCTS);
     }
 
-    // Carrega carrinho do localStorage
     const savedCart = localStorage.getItem('garagem_cart');
     if (savedCart) {
       try {
@@ -142,7 +138,6 @@ export default function CustomerMenuPage() {
     }
   }, []);
 
-  // Salva alterações no carrinho
   const updateCartState = (newCart: CartItem[]) => {
     setCart(newCart);
     localStorage.setItem(
@@ -184,7 +179,6 @@ export default function CustomerMenuPage() {
     updateCartState(updated);
   };
 
-  // Filtragem Estável de Produtos (Sem sumir itens ao trocar de aba)
   const filteredProducts = products.filter((item) => {
     const matchesCategory =
       activeCategory === 'todos' ||
