@@ -54,6 +54,7 @@ export default function AdminCashRegisterPage() {
   const [editingOperatorId, setEditingOperatorId] = useState<string | null>(null);
   const [fullNameInput, setFullNameInput] = useState('');
   const [cpfInput, setCpfInput] = useState('');
+  const [birthDateInput, setBirthDateInput] = useState('');
   const [usernameNewInput, setUsernameNewInput] = useState('');
   const [passwordNewInput, setPasswordNewInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
@@ -113,7 +114,7 @@ export default function AdminCashRegisterPage() {
     }
   };
 
-  // 3. SALVAR OU EDITAR OPERADOR (Exige Admin Unlocked)
+  // 3. SALVAR OU EDITAR OPERADOR (Exige Admin Unlocked e Data de Nascimento)
   const handleSaveOperatorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setOperatorFormError('');
@@ -128,6 +129,7 @@ export default function AdminCashRegisterPage() {
       id: editingOperatorId || undefined,
       fullName: fullNameInput,
       cpf: cpfInput,
+      birthDate: birthDateInput,
       username: usernameNewInput,
       password: passwordNewInput,
     });
@@ -145,6 +147,7 @@ export default function AdminCashRegisterPage() {
     setEditingOperatorId(null);
     setFullNameInput('');
     setCpfInput('');
+    setBirthDateInput('');
     setUsernameNewInput('');
     setPasswordNewInput('');
     setConfirmPasswordInput('');
@@ -154,6 +157,7 @@ export default function AdminCashRegisterPage() {
     setEditingOperatorId(op.id);
     setFullNameInput(op.fullName);
     setCpfInput(op.cpf);
+    setBirthDateInput(op.birthDate || '');
     setUsernameNewInput(op.username);
     setPasswordNewInput(op.passwordHash);
     setConfirmPasswordInput(op.passwordHash);
@@ -436,6 +440,17 @@ export default function AdminCashRegisterPage() {
                   </div>
 
                   <div>
+                    <label className="block font-bold text-neutral-700 mb-1">Data de Nascimento</label>
+                    <input
+                      type="date"
+                      required
+                      value={birthDateInput}
+                      onChange={(e) => setBirthDateInput(e.target.value)}
+                      className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block font-bold text-neutral-700 mb-1">Login (Ex: @Maycon)</label>
                     <input
                       type="text"
@@ -459,7 +474,7 @@ export default function AdminCashRegisterPage() {
                     />
                   </div>
 
-                  <div className="md:col-span-2">
+                  <div>
                     <label className="block font-bold text-neutral-700 mb-1">Confirmar Senha</label>
                     <input
                       type="password"
@@ -499,7 +514,9 @@ export default function AdminCashRegisterPage() {
                         <div>
                           <span className="font-bold text-neutral-900">{op.fullName}</span>
                           <span className="text-indigo-700 font-bold ml-2">{op.username}</span>
-                          <span className="text-neutral-500 block">CPF: {op.cpf} • Cadastrado em: {op.createdAt}</span>
+                          <span className="text-neutral-500 block">
+                            CPF: {op.cpf} • Nasc: {op.birthDate ? op.birthDate.split('-').reverse().join('/') : 'N/A'} • Cadastrado em: {op.createdAt}
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-2">

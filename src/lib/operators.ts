@@ -2,7 +2,8 @@ export interface CashOperator {
   id: string;
   fullName: string;
   cpf: string;
-  username: string; // Ex: "@Maycon"
+  birthDate: string;
+  username: string;
   passwordHash: string;
   createdAt: string;
 }
@@ -24,6 +25,7 @@ export function saveOperator(operatorData: {
   id?: string;
   fullName: string;
   cpf: string;
+  birthDate: string;
   username: string;
   password: string;
 }): { success: boolean; message: string; operator?: CashOperator } {
@@ -33,11 +35,16 @@ export function saveOperator(operatorData: {
   const rawUsername = operatorData.username.trim();
   const cleanUsername = rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`;
 
-  if (!operatorData.fullName.trim() || !operatorData.cpf.trim() || !rawUsername || !operatorData.password) {
-    return { success: false, message: 'Todos os campos são obrigatórios.' };
+  if (
+    !operatorData.fullName.trim() ||
+    !operatorData.cpf.trim() ||
+    !operatorData.birthDate ||
+    !rawUsername ||
+    !operatorData.password
+  ) {
+    return { success: false, message: 'Todos os campos, incluindo Data de Nascimento, são obrigatórios.' };
   }
 
-  // Verifica duplicação de username de login
   const existing = operators.find(
     (o) => o.username.toLowerCase() === cleanUsername.toLowerCase() && o.id !== operatorData.id
   );
@@ -49,7 +56,6 @@ export function saveOperator(operatorData: {
   let savedOp: CashOperator;
 
   if (operatorData.id) {
-    // Editar existente
     const index = operators.findIndex((o) => o.id === operatorData.id);
     if (index === -1) return { success: false, message: 'Operador não encontrado.' };
 
@@ -57,16 +63,17 @@ export function saveOperator(operatorData: {
       ...operators[index],
       fullName: operatorData.fullName.trim(),
       cpf: operatorData.cpf.trim(),
+      birthDate: operatorData.birthDate,
       username: cleanUsername,
       passwordHash: operatorData.password,
     };
     operators[index] = savedOp;
   } else {
-    // Novo cadastro
     savedOp = {
       id: Date.now().toString(),
       fullName: operatorData.fullName.trim(),
       cpf: operatorData.cpf.trim(),
+      birthDate: operatorData.birthDate,
       username: cleanUsername,
       passwordHash: operatorData.password,
       createdAt: new Date().toLocaleDateString('pt-BR'),
@@ -75,7 +82,7 @@ export function saveOperator(operatorData: {
   }
 
   localStorage.setItem(STORAGE_OPERATORS, JSON.stringify(operators));
-  return { success: true, message: 'Operador salvo com sucesso!', operator: savedOp };
+  return { success: true, message: 'Operador/Colaborador salvo com sucesso!', operator: savedOp };
 }
 
 export function deleteOperator(id: string): { success: boolean; message: string } {
@@ -90,16 +97,11 @@ export function authenticateOperator(
   passwordInput: string
 ): { success: boolean; message: string; operator?: CashOperator } {
   const operators = getOperators();
-  const rawUsername = usernameInput.trim();
-  const cleanUsername = rawUsername.startsWith('@') ? rawUsername.toLowerCase() : `@${rawUsername.toLowerCase()}`;
+  const cleanUsername = usernameInput.trim().startsWith('@')
+    ? usernameInput.trim().toLowerCase()
+    : `@${usernameInput.trim().toLowerCase()}`;
 
-  const op = operators.find(
-    (o) => o.username.toLowerCase() === cleanUsername && o.passwordHash === passwordInput
-  );
-
-  if (!op) {
-    return { success: false, message: 'Login de Operador ou Senha incorretos!' };
-  }
-
-  return { success: true, message: 'Operador autenticado!', operator: op };
+  const op = operators.find((o) => o.username.toLowerCase() === cleanUsername && o.passwordHash === passwordInput);
+  if (!op) return { success: false, message: 'Login ou Senha incorretos!' };
+  return { success: true, message: 'Autenticado!', operator: op };
 }
