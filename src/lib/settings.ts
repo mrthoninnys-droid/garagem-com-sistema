@@ -1,79 +1,95 @@
-import { getCurrentCashSession, openCashRegister } from './cash-register';
+export interface CardRates {
+  creditOnlineFee: number;
+  debitOnlineFee: number;
+  creditInPersonFee: number;
+  debitInPersonFee: number;
+  pixFee: number;
+}
 
 export interface DaySchedule {
   enabled: boolean;
-  openTime: string;  // Ex: "18:00"
-  closeTime: string; // Ex: "23:30"
+  openTime: string;
+  closeTime: string;
 }
 
-export interface CardRates {
-  creditOnlineFee: number;      // Ex: 3.5 (%)
-  debitOnlineFee: number;       // Ex: 2.0 (%)
-  creditInPersonFee: number;    // Ex: 2.5 (%)
-  debitInPersonFee: number;     // Ex: 1.5 (%)
-  pixFee: number;               // Ex: 0.0 (%)
+export interface WeeklySchedule {
+  [key: string]: DaySchedule;
+}
+
+export interface BankSettings {
+  pixKey: string;
+  pixKeyType: 'cnpj' | 'cpf' | 'phone' | 'email' | 'random';
+  bankName: string;
+  accountHolder: string;
+  cpfCnpj: string;
+}
+
+export interface PaymentGatewaySettings {
+  provider: 'mercadopago' | 'asaas' | 'pagbank';
+  publicKey: string;
+  accessToken: string;
 }
 
 export interface StoreSettings {
   isOpenManual: boolean;
-  useManualStatus: boolean; // true = manual, false = horário programado
-  adminPassword: string;
-  pixKey: string;
-  pixKeyType: string;
-  bankName: string;
-  accountHolder: string;
+  useManualStatus: boolean;
+  weeklySchedule: WeeklySchedule;
   cardRates: CardRates;
-  weeklySchedule: Record<string, DaySchedule>; // 'segunda', 'terca', etc.
+  bankSettings?: BankSettings;
+  gatewaySettings?: PaymentGatewaySettings;
 }
 
 export const DAYS_OF_WEEK = [
-  { key: 'domingo', label: 'Domingo' },
-  { key: 'segunda', label: 'Segunda-feira' },
-  { key: 'terca', label: 'Terça-feira' },
-  { key: 'quarta', label: 'Quarta-feira' },
-  { key: 'quinta', label: 'Quinta-feira' },
-  { key: 'sexta', label: 'Sexta-feira' },
-  { key: 'sabado', label: 'Sábado' },
+  { key: 'monday', label: 'Segunda-feira' },
+  { key: 'tuesday', label: 'Terça-feira' },
+  { key: 'wednesday', label: 'Quarta-feira' },
+  { key: 'thursday', label: 'Quinta-feira' },
+  { key: 'friday', label: 'Sexta-feira' },
+  { key: 'saturday', label: 'Sábado' },
+  { key: 'sunday', label: 'Domingo' },
 ];
+
+const STORAGE_KEY = 'garagem_store_settings';
 
 export const DEFAULT_SETTINGS: StoreSettings = {
   isOpenManual: true,
-  useManualStatus: true,
-  adminPassword: 'admin',
-  pixKey: '000.000.000-00',
-  pixKeyType: 'CPF',
-  bankName: 'Banco do Brasil',
-  accountHolder: 'Garagem.Com',
-  cardRates: {
-    creditOnlineFee: 3.5,
-    debitOnlineFee: 2.0,
-    creditInPersonFee: 2.5,
-    debitInPersonFee: 1.5,
-    pixFee: 0.0,
-  },
+  useManualStatus: false,
   weeklySchedule: {
-    domingo: { enabled: true, openTime: '18:00', closeTime: '23:30' },
-    segunda: { enabled: false, openTime: '18:00', closeTime: '23:30' },
-    terca: { enabled: true, openTime: '18:00', closeTime: '23:30' },
-    quarta: { enabled: true, openTime: '18:00', closeTime: '23:30' },
-    quinta: { enabled: true, openTime: '18:00', closeTime: '23:30' },
-    sexta: { enabled: true, openTime: '18:00', closeTime: '00:00' },
-    sabado: { enabled: true, openTime: '18:00', closeTime: '00:00' },
+    monday: { enabled: true, openTime: '18:00', closeTime: '23:30' },
+    tuesday: { enabled: true, openTime: '18:00', closeTime: '23:30' },
+    wednesday: { enabled: true, openTime: '18:00', closeTime: '23:30' },
+    thursday: { enabled: true, openTime: '18:00', closeTime: '23:30' },
+    friday: { enabled: true, openTime: '18:00', closeTime: '23:59' },
+    saturday: { enabled: true, openTime: '18:00', closeTime: '23:59' },
+    sunday: { enabled: true, openTime: '18:00', closeTime: '23:30' },
+  },
+  cardRates: {
+    creditOnlineFee: 3.99,
+    debitOnlineFee: 1.99,
+    creditInPersonFee: 3.19,
+    debitInPersonFee: 1.49,
+    pixFee: 0.99,
+  },
+  bankSettings: {
+    pixKey: '',
+    pixKeyType: 'cnpj',
+    bankName: '',
+    accountHolder: '',
+    cpfCnpj: '',
+  },
+  gatewaySettings: {
+    provider: 'mercadopago',
+    publicKey: '',
+    accessToken: '',
   },
 };
 
 export function getStoreSettings(): StoreSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
-  const saved = localStorage.getItem('garagem_store_settings');
+  const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return DEFAULT_SETTINGS;
   try {
-    const parsed = JSON.parse(saved);
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      cardRates: { ...DEFAULT_SETTINGS.cardRates, ...(parsed.cardRates || {}) },
-      weeklySchedule: { ...DEFAULT_SETTINGS.weeklySchedule, ...(parsed.weeklySchedule || {}) },
-    };
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -81,50 +97,33 @@ export function getStoreSettings(): StoreSettings {
 
 export function saveStoreSettings(settings: StoreSettings) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('garagem_store_settings', JSON.stringify(settings));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   }
 }
 
-// Verifica se a loja está aberta no dia e horário atuais
 export function isStoreOpen(): boolean {
   const settings = getStoreSettings();
-
-  // Modo Manual
   if (settings.useManualStatus) {
     return settings.isOpenManual;
   }
 
-  // Modo Programado Automático
   const now = new Date();
-  const dayIndex = now.getDay(); // 0 = Domingo, 1 = Segunda, ...
-  const dayKey = DAYS_OF_WEEK[dayIndex].key;
-  const dayConfig = settings.weeklySchedule[dayKey];
+  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const currentDayKey = dayKeys[now.getDay()];
+  const dayConfig = settings.weeklySchedule[currentDayKey];
 
-  if (!dayConfig || !dayConfig.enabled) {
-    return false;
-  }
+  if (!dayConfig || !dayConfig.enabled) return false;
+
+  const [openHour, openMin] = dayConfig.openTime.split(':').map(Number);
+  const [closeHour, closeMin] = dayConfig.closeTime.split(':').map(Number);
 
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  const [openH, openM] = dayConfig.openTime.split(':').map(Number);
-  const [closeH, closeM] = dayConfig.closeTime.split(':').map(Number);
-
-  const openMinutes = openH * 60 + openM;
-  let closeMinutes = closeH * 60 + closeM;
+  const openMinutes = openHour * 60 + openMin;
+  let closeMinutes = closeHour * 60 + closeMin;
 
   if (closeMinutes < openMinutes) {
-    closeMinutes += 24 * 60; // Passa da meia-noite
+    closeMinutes += 24 * 60;
   }
 
-  const isOpenNow = currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
-
-  // Se a loja abriu automaticamente no horário programado, garante que o caixa também abra!
-  if (isOpenNow) {
-    const cashSession = getCurrentCashSession();
-    if (!cashSession || !cashSession.isOpen) {
-      openCashRegister(100); // Abre o caixa automaticamente com troco padrão R$ 100
-    }
-  }
-
-  return isOpenNow;
+  return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 }
